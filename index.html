@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>松本会計｜報酬見積ツール r4.11（御中/様・数量12反映・UI洗練）</title>
+<title>松本会計｜報酬見積ツール r4.12（御中/様・数量12反映・UI洗練）</title>
 <style>
 :root{
   --mk-bg:#f7fafc; --mk-card:#fff; --mk-ink:#1a202c; --mk-sub:#4a5568; --mk-border:#e2e8f0;
@@ -48,15 +48,13 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 @media(min-width:960px){#services{grid-template-columns:1fr 1fr}}
 
 /* サービス行のレイアウトを洗練 */
-.svc-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.6rem;align-items:center}
-.svc-main{min-width:0}
+.svc-row{display:grid;grid-template-columns:minmax(0,1.6fr) auto auto;gap:.6rem;align-items:center}
+.svc-main{min-width:0;display:flex;align-items:center;gap:.5rem}
 .svc-main label{font-weight:600}
-.svc-main .mini{margin-top:.2rem}
+.svc-main .mini{display:none} 
 .svc-ctrls{display:flex;gap:.5rem;align-items:center;justify-content:flex-end}
 .svc-ctrls .pill{white-space:nowrap}
-@media(max-width:640px){
-  .svc-row{grid-template-columns:1fr}
-  .svc-ctrls{justify-content:flex-start;flex-wrap:wrap}
+@media(max-width:640px){.svc-row{grid-template-columns:1fr}.svc-ctrls{justify-content:flex-start;flex-wrap:wrap}.svc-title{white-space:nowrap;}}
 }
 
 /* 見積様式（コンパクトフォント／項目を折返ししない） */
@@ -117,6 +115,10 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 footer.mk-mini{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--mk-border);padding:.5rem 1rem;font-size:.8rem}
 footer.mk-mini .inner{max-width:1100px;margin:0 auto;display:flex;gap:.6rem;flex-wrap:wrap}
 footer.mk-mini a{color:inherit;text-decoration:underline}
+.svc-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.svc-ctrls{display:flex;gap:.5rem;align-items:center;justify-content:flex-end}
+.pill.unit{background:#edf2f7}
+.pill.info{background:#f1f5f9;cursor:help}
 </style>
 </head>
 <body>
@@ -124,7 +126,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
   <div class="bar">
     <div class="wrap" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
       <span class="title">報酬見積ツール</span>
-      <span class="badge">r4.11</span>
+      <span class="badge">r4.12</span>
       <span class="mini">松本会計｜画面切替</span>
       <div class="seg noprint" aria-label="区分切替">
         <button id="ent-corp">法人</button>
@@ -325,7 +327,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
 </footer>
 
 <script>
-const APP_VER='r4.11';
+const APP_VER='r4.12';
 const TAX=0.10;
 const el = (id)=>document.getElementById(id);
 const fmt=(n)=> (isNaN(n)?0:n).toLocaleString('ja-JP');
@@ -494,7 +496,8 @@ function renderServiceRow(it){
   const idx=services.indexOf(it); const id=`svc_${it.cat}_${idx}`;
   const row=document.createElement('div'); row.className='svc-row';
   const left=document.createElement('div'); left.className='svc-main';
-  left.innerHTML=`<label for=\"${id}\">${it.name} <span class=\"mini\">(${it.unit})</span></label>${it.note?`<div class=\"mini\">${it.note}</div>`:''}`;
+  const info = it.note ? `<span class=\"pill info\" title=\"${it.note}\">i</span>` : '';
+  left.innerHTML = `<label for=\"${id}\" class=\"svc-title\" title=\"${it.name}\">${it.name}</label><span class=\"pill unit\">${it.unit}</span>${info}`;
   const ctrls=document.createElement('div'); ctrls.className='svc-ctrls';
   let priceCtrl = `<span class=\"pill\">単価 <b>${it.kind==='mult_m' ? '＝月次×'+it.months : yen(it.price)}</b></span>`;
   if(it.kind==='asset_tax') priceCtrl=`<span class=\"pill\">単価 <b>${yen(it.base)}＋${yen(it.extra)}×(件数-1)</b></span>`;
