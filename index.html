@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>松本会計｜報酬見積ツール r4.7（印刷最適・PC2列・タブ強調）</title>
+<title>松本会計｜報酬見積ツール r4.10（入力初期値の空欄化）</title>
 <style>
 :root{
   --mk-bg:#f7fafc; --mk-card:#fff; --mk-ink:#1a202c; --mk-sub:#4a5568; --mk-border:#e2e8f0;
@@ -12,8 +12,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--mk-bg);color:var(--mk-ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",Meiryo,sans-serif}
 
-/* 共通 */
-.container{max-width:1200px;margin:1rem auto;padding:0 1rem 6rem}
+.container{max-width:1100px;margin:1rem auto 5rem;padding:0 1rem}
 .btn{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--mk-border);background:#fff;border-radius:999px;padding:.5rem .9rem;font-weight:600;cursor:pointer}
 .btn.primary{background:var(--mk-primary);border-color:var(--mk-primary);color:#fff}
 .btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
@@ -37,47 +36,47 @@ summary .caret{display:inline-block;transition:transform .2s}
 
 /* ヘッダー */
 header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,rgba(255,255,255,.92));border-bottom:1px solid var(--mk-border);backdrop-filter:blur(4px)}
-.bar{max-width:1200px;margin:0 auto;padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+.bar{max-width:1100px;margin:0 auto;padding:.8rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem}
 .title{font-weight:800}
 .badge{background:var(--mk-primary);color:#fff;border-radius:999px;padding:.15rem .55rem;font-size:.75rem}
 
-/* 入力ビューの2列化 */
-#input-grid{display:grid;grid-template-columns:1fr;gap:1rem;align-items:start}
-@media (min-width: 1000px){
-  #input-grid{grid-template-columns:1fr 1fr}
-}
-.card.centered{max-width:1000px;margin:0 auto}
+/* 入力ビュー（1カラム固定） */
+#input-col{max-width:1000px;margin:0 auto}
 
-/* 見積様式（コンパクトフォント） */
+/* サービス選択カード：PCは2カラム */
+#services{display:grid;gap:.8rem;grid-template-columns:1fr}
+@media(min-width:960px){#services{grid-template-columns:1fr 1fr}}
+
+/* 見積様式（コンパクトフォント／項目を折返ししない） */
 .quote-wrap{background:#fff;border:1px solid #999;max-width:1000px;margin:0 auto}
-.q-head{padding:16px 20px;border-bottom:2px solid #000;font-size:13px}
+.q-head{padding:12px 16px;border-bottom:2px solid #000;font-size:13px}
 .q-title{font-size:20px;letter-spacing:.25em;text-align:center;margin:0 0 6px 0}
 .q-toprow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .q-topbox{font-size:13px;color:#000}
 .q-topbox .row{display:flex;gap:8px;align-items:center;margin:.2rem 0}
-.q-issuer{border:1px solid #000;padding:8px;min-width:300px}
+.q-issuer{padding:8px;min-width:300px}
 .q-issuer .name{font-weight:800;font-size:14px;margin-bottom:.3rem}
 .q-issuer .row{display:flex;gap:6px;align-items:center}
-.q-summary{margin:14px 20px;border:2px solid #000;padding:8px 12px;display:flex;gap:12px;align-items:center;font-size:14px}
+.q-summary{margin:14px auto;border:2px solid #000;padding:8px 12px;display:flex;gap:12px;align-items:center;font-size:14px;width:max-content}
 .q-summary .label{font-weight:700}
 .q-summary .amt{font-size:18px;font-weight:800}
 
-.q-table{width:calc(100% - 40px);margin:0 20px 18px;border-collapse:collapse;border:1px solid #000;font-size:13px}
+.q-table{width:calc(100% - 32px);margin:0 16px 14px;border-collapse:collapse;border:1px solid #000;font-size:13px}
 .q-table th,.q-table td{border:1px solid #000;padding:6px 8px}
 .q-table thead th{background:#e2e8f0}
-.q-table th:nth-child(1){width:56%;text-align:left}
+.q-table th:nth-child(1){width:62%;text-align:left;white-space:nowrap}
 .q-table th:nth-child(2){width:12%}
-.q-table th:nth-child(3){width:14%}
-.q-table th:nth-child(4){width:18%}
+.q-table th:nth-child(3){width:12%}
+.q-table th:nth-child(4){width:14%}
 .q-table td{text-align:right}
-.q-table td:first-child{text-align:left}
-.q-totalbox{width:calc(100% - 40px);margin:0 20px 18px}
+.q-table td:first-child{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-totalbox{width:calc(100% - 32px);margin:0 16px 14px}
 .q-totalbox .grid{display:grid;grid-template-columns:1fr 240px;gap:0}
 .q-totalbox .labels{border-left:1px solid #000;border-right:1px solid #000;border-bottom:1px solid #000;font-size:13px}
 .q-totalbox .labels .row{display:flex;justify-content:space-between;border-top:1px solid #000;padding:6px 8px}
 .q-totalbox .labels .row.total{background:#e2e8f0;font-weight:800}
 
-.q-notes{width:calc(100% - 40px);margin:0 20px 20px;border:1px solid #000}
+.q-notes{width:calc(100% - 32px);margin:0 16px 16px;border:1px solid #000}
 .q-notes .hd{background:#e2e8f0;border-bottom:1px solid #000;padding:6px 8px;font-weight:700;font-size:13px}
 .q-notes .bd{padding:8px}
 #notes-text{min-height:64px;font-size:13px}
@@ -92,7 +91,7 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 .vadd-summary{margin-top:10px;display:flex;gap:10px;flex-wrap:wrap}
 .vadd-summary .pill{font-size:12px}
 
-/* 印刷時：入力UIは非表示、値だけ出す */
+/* 印刷時：入力UIは非表示、値だけ出力／【拠点】ラベルを非表示*/
 @media print{
   header,.noprint,footer{display:none!important}
   body{background:#fff}
@@ -104,7 +103,7 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 }
 
 footer.mk-mini{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--mk-border);padding:.5rem 1rem;font-size:.8rem}
-footer.mk-mini .inner{max-width:1200px;margin:0 auto;display:flex;gap:.6rem;flex-wrap:wrap}
+footer.mk-mini .inner{max-width:1100px;margin:0 auto;display:flex;gap:.6rem;flex-wrap:wrap}
 footer.mk-mini a{color:inherit;text-decoration:underline}
 </style>
 </head>
@@ -113,15 +112,14 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
   <div class="bar">
     <div class="wrap" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
       <span class="title">報酬見積ツール</span>
-      <span class="badge">r4.7</span>
-      <span class="mini">松本会計｜スマホ/PC 2列</span>
+      <span class="badge">r4.10</span>
+      <span class="mini">松本会計｜画面切替</span>
       <div class="seg noprint" aria-label="区分切替">
         <button id="ent-corp">法人</button>
         <button id="ent-sole">個人</button>
       </div>
     </div>
     <div class="wrap noprint" style="display:flex;gap:.6rem;align-items:center">
-      <button class="btn" id="btn-go-quote">御見積書を見る</button>
       <button class="btn" id="btn-back-input" style="display:none">入力に戻る</button>
       <button class="btn" onclick="window.print()">印刷/PDF</button>
       <button class="btn" onclick="localStorage.clear();location.reload()">初期化</button>
@@ -130,9 +128,9 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
 </header>
 
 <div class="container">
-  <!-- 入力ビュー：PCでは2列表示 -->
+  <!-- 入力ビュー：1カラムに集約（左カラム相当） -->
   <section id="view-input" class="view active">
-    <div class="card centered">
+    <div id="input-col" class="card">
       <div class="hd">
         <strong>入力（付加価値額→月次顧問料 / サービス選択）</strong>
         <div class="seg noprint">
@@ -141,87 +139,85 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
         </div>
       </div>
       <div class="bd">
-        <div id="input-grid">
-          <!-- 付加価値パネル -->
-          <div class="panel" id="panel-v">
-            <div class="mini">区分：<b id="ent-label">法人</b></div>
+        <!-- 付加価値パネル -->
+        <div class="panel" id="panel-v">
+          <div class="mini">区分：<b id="ent-label">法人</b></div>
+          <div class="divider"></div>
+          <div id="calc-corp">
+            <div class="mini">算式（法人）：<b>経常利益＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費</b></div>
             <div class="divider"></div>
-            <div id="calc-corp">
-              <div class="mini">算式（法人）：<b>経常利益＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費</b></div>
-              <div class="divider"></div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-                <div><div class="mini">経常利益</div><input id="c_ordinary" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">人件費</div><input id="c_labor" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">支払利息</div><input id="c_int" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">賃借料</div><input id="c_rent" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">リース料</div><input id="c_lease" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">租税公課</div><input id="c_tax" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">減価償却費</div><input id="c_dep" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-              </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+              <div><div class="mini">経常利益</div><input id="c_ordinary" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">人件費</div><input id="c_labor" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">支払利息</div><input id="c_int" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">賃借料</div><input id="c_rent" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">リース料</div><input id="c_lease" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">租税公課</div><input id="c_tax" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">減価償却費</div><input id="c_dep" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
             </div>
-            <div id="calc-sole" style="display:none">
-              <div class="mini">算式（個人）：<b>青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000</b></div>
-              <div class="divider"></div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
-                <div><div class="mini">青色控除前利益</div><input id="s_preprofit" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">青色専従者給与</div><input id="s_family" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">人件費</div><input id="s_labor" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">支払利息</div><input id="s_int" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">賃借料</div><input id="s_rent" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">リース料</div><input id="s_lease" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">租税公課</div><input id="s_tax" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-                <div><div class="mini">減価償却費</div><input id="s_dep" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder="0"></div>
-              </div>
-            </div>
-            <div class="divider"></div>
-            <div class="wrap">
-              <span class="pill">付加価値額：<b id="vadd">0</b> 円/年</span>
-              <span class="pill">該当帯：<b id="band">—</b></span>
-              <span class="pill">月次顧問料（税抜）：<b id="monthly">¥0</b></span>
-            </div>
-            <div class="divider"></div>
-            <details id="bandsWrap" class="details">
-              <summary class="pill"><span class="caret">▶</span> 付加価値帯ー月次顧問料（税抜）</summary>
-              <div style="margin-top:.5rem">
-                <table id="bands" style="width:100%;border-collapse:collapse">
-                  <thead><tr><th style="text-align:left">付加価値帯</th><th style="text-align:right">月次顧問料（税抜）</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </details>
           </div>
+          <div id="calc-sole" style="display:none">
+            <div class="mini">算式（個人）：<b>青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000</b></div>
+            <div class="divider"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+              <div><div class="mini">青色控除前利益</div><input id="s_preprofit" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">青色専従者給与</div><input id="s_family" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">人件費</div><input id="s_labor" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">支払利息</div><input id="s_int" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">賃借料</div><input id="s_rent" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">リース料</div><input id="s_lease" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">租税公課</div><input id="s_tax" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+              <div><div class="mini">減価償却費</div><input id="s_dep" type="text" inputmode="numeric" data-commas data-role="vadd" placeholder=""></div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="wrap">
+            <span class="pill">付加価値額：<b id="vadd">0</b> 円/年</span>
+            <span class="pill">該当帯：<b id="band">—</b></span>
+            <span class="pill">月次顧問料（税抜）：<b id="monthly">¥0</b></span>
+          </div>
+          <div class="divider"></div>
+          <details id="bandsWrap" class="details">
+            <summary class="pill"><span class="caret">▶</span> 付加価値帯ー月次顧問料（税抜）</summary>
+            <div style="margin-top:.5rem">
+              <table id="bands" style="width:100%;border-collapse:collapse">
+                <thead><tr><th style="text-align:left">付加価値帯</th><th style="text-align:right">月次顧問料（税抜）</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </details>
+        </div>
 
-          <!-- サービス選択パネル -->
-          <div class="panel" id="panel-s">
-            <div class="mini">必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。<span class="pill">区分：<b id="ent-label2">法人</b></span></div>
-            <div class="divider"></div>
-            <div id="services"></div>
-            <div class="divider"></div>
-            <!-- 調整（サービス選択の直上） -->
-            <div class="card" style="margin:.2rem 0 1rem 0">
-              <div class="hd"><strong>調整（自由記入）</strong><span class="mini">値引きはマイナスで入力</span></div>
-              <div class="bd">
-                <div class="wrap" style="align-items:flex-end">
-                  <div style="flex:2;min-width:220px">
-                    <div class="mini">メモ（宛名とは連動しません）</div>
-                    <input id="adj-memo" type="text" placeholder="例：値引き・端数調整など">
-                  </div>
-                  <div style="flex:1;min-width:200px">
-                    <div class="mini">調整額（±）</div>
-                    <input id="adj-amt" type="text" inputmode="numeric" data-commas placeholder="0">
-                  </div>
+        <!-- サービス選択パネル -->
+        <div class="panel" id="panel-s" style="margin-top:1rem">
+          <div class="mini">必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。<span class="pill">区分：<b id="ent-label2">法人</b></span></div>
+          <div class="divider"></div>
+          <div id="services"></div>
+          <div class="divider"></div>
+          <!-- 調整（サービス選択の直上） -->
+          <div class="card" style="margin:.2rem 0 1rem 0">
+            <div class="hd"><strong>調整（自由記入）</strong><span class="mini">値引きはマイナスで入力</span></div>
+            <div class="bd">
+              <div class="wrap" style="align-items:flex-end">
+                <div style="flex:2;min-width:220px">
+                  <div class="mini">内容</div>
+                  <input id="adj-memo" type="text" placeholder="例：値引き・端数調整など">
+                </div>
+                <div style="flex:1;min-width:200px">
+                  <div class="mini">調整額（±）</div>
+                  <input id="adj-amt" type="text" inputmode="numeric" data-commas placeholder="">
                 </div>
               </div>
             </div>
-            <button id="btn-show-quote" class="btn primary">お見積り ▶</button>
           </div>
+          <button id="btn-show-quote" class="btn primary">お見積り ▶</button>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 御見積書ビュー（切替でフル幅） -->
-  <section id="view-quote" class="view">
+  <!-- 御見積書ビュー（右カラム相当。画面切替で表示） -->
+  <section id="view-quote" class="view" style="display:none">
     <div class="quote-wrap">
       <div class="q-head">
         <div class="q-title">御　見　積　書</div>
@@ -250,10 +246,10 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
               </select>
             </div>
             <div class="name" id="issuer-name">税理士法人松本会計事務所</div>
-            <div class="row"><span class="mini">【拠点】</span><span id="issuer-branch">【神戸事務所】</span></div>
+            <div class="row"><span class="mini screen-only">【拠点】</span><span id="issuer-branch">【神戸事務所】</span></div>
             <div class="row"><span class="mini">〒</span><span id="issuer-addr">651-0086 神戸市中央区磯上通8-1-1-7F</span></div>
             <div class="row"><span class="mini">TEL</span><span id="issuer-tel">078-242-2177</span></div>
-            <div class="row"><span class="mini">代表</span><span id="issuer-rep">代表社員 松本考史</span></div>
+            <div class="row"><span id="issuer-rep">代表社員 松本考史</span></div>
           </div>
         </div>
       </div>
@@ -288,7 +284,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
       </div>
     </div>
 
-    <!-- 別紙：付加価値計算書（画面では非表示、印刷時に続きで出力） -->
+    <!-- 別紙：付加価値計算書（印刷時に続きで出力） -->
     <div class="vadd-sheet" id="vadd-print">
       <div class="hd">付加価値計算書（別紙）</div>
       <div class="bd">
@@ -317,7 +313,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
 </footer>
 
 <script>
-const APP_VER='r4.7';
+const APP_VER='r4.10';
 const TAX=0.10;
 const el = (id)=>document.getElementById(id);
 const fmt=(n)=> (isNaN(n)?0:n).toLocaleString('ja-JP');
@@ -325,10 +321,11 @@ const yen=(n)=>'¥'+fmt(Math.round(n||0));
 
 let ent = localStorage.getItem('mk_ent')||'corp';
 let adjust = {memo:'', amt:0};
+let printMode=false; // 印刷時は月次数量=12表示
 
 const PRESET_OFFICES={
   kobe:{ name:'税理士法人松本会計事務所', branch:'【神戸事務所】', addr:'651-0086 神戸市中央区磯上通8-1-1-7F', tel:'078-242-2177', rep:'代表社員 松本考史' },
-  sakai:{ name:'税理士法人松本会計事務所', branch:'【境港事務所】', addr:'（住所をご入力ください）', tel:'（TELをご入力ください）', rep:'（代表者名をご入力ください）' }
+  sakai:{ name:'税理士法人松本会計事務所', branch:'【境港事務所】', addr:'684-0071 鳥取県境港市外江町3801', tel:'0859-44-6195', rep:'代表社員 松本正福' }
 };
 
 const bandsCorp=[
@@ -366,7 +363,7 @@ const servicesMaster=[
   {ent:'corp',cat:"決算・申告（法人）", name:"法人決算・申告一式", unit:"スポット", kind:"mult_m", months:4, price:0, qty:0, allowQty:false, note:"月次顧問報酬の4ヶ月分"},
   {ent:'corp',cat:"決算・申告（法人）", name:"消費税申告書作成", unit:"スポット", kind:"mult_m", months:2, price:0, qty:0, allowQty:false, note:"月次顧問報酬の2ヶ月分"},
   {ent:'both',cat:"年末調整", name:"年末調整 基本料金", unit:"スポット", kind:"fixed", price:20000, qty:0, allowQty:false, note:"法定調書合計表含む"},
-  {ent:'both',cat:"年末調整", name:"年末調整 人数（1人目から）", unit:"スポット", kind:"per_qty", price:3000, qty:0, allowQty:true, note:"×人数"},
+  {ent:'both',cat:"年末調整", name:"源泉徴収票発行人数", unit:"スポット", kind:"per_qty", price:3000, qty:null, allowQty:true, note:"×人数"},
   {ent:'both',cat:"償却資産税申告", name:"償却資産税申告（市町村・件数）", unit:"スポット", kind:"asset_tax", base:10000, extra:3000, qty:0, allowQty:true, note:"基本10,000円＋（件数-1）×3,000円"},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX4クラウド", unit:"月額", kind:"fixed", price:60000, qty:0, allowQty:false, editablePrice:true},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX2クラウド", unit:"月額", kind:"fixed", price:15000, qty:0, allowQty:false, editablePrice:true},
@@ -377,16 +374,24 @@ const servicesMaster=[
 let services=[];
 function resetServices(){ services = servicesMaster.filter(s=>s.ent==='both'||s.ent===ent).map(s=>({...s})); }
 
-/* 数値入力：負数許容 */
 function parseNum(str){
   const s=(String(str||'')).replace(/,/g,'').trim();
   const n = parseFloat(s.replace(/[^0-9.-]/g,''));
   return isNaN(n)?0:n;
 }
 function bindCommaInput(input){
-  const fmtIt=()=>{ const n=parseNum(input.value); input.value = fmt(n); if(input.dataset.role==='vadd') recalc(); };
-  input.addEventListener('input', fmtIt);
-  input.addEventListener('blur', fmtIt);
+  const formatNow=()=>{
+    const raw=(input.value||'').replace(/,/g,'').trim();
+    if(raw==='' || raw==='-'){ // 空欄・マイナスだけはそのまま
+      if(input.dataset.role==='vadd') recalc();
+      return;
+    }
+    const n=parseNum(raw);
+    input.value = fmt(n);
+    if(input.dataset.role==='vadd') recalc();
+  };
+  input.addEventListener('input', formatNow);
+  input.addEventListener('blur', formatNow);
 }
 
 function setEnt(v){ ent=v; localStorage.setItem('mk_ent',ent); updateEntUI(); renderBands(); recalc(); }
@@ -441,8 +446,8 @@ function renderServices(){
   const cats=[...new Set(services.map(x=>x.cat))].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   cats.forEach(c=>{
     const items=services.filter(x=>x.cat===c);
-    const box=document.createElement('div'); box.className='card'; box.style.marginBottom='.6rem';
-    box.innerHTML=`<div class="hd"><strong>${c}</strong><span class="mini">${items.length}項目</span></div>`;
+    const box=document.createElement('div'); box.className='card';
+    box.innerHTML=`<div class=\"hd\"><strong>${c}</strong><span class=\"mini\">${items.length}項目</span></div>`;
     const bd=document.createElement('div'); bd.className='bd';
 
     if(c==='ソフトウェアレンタル'){
@@ -454,13 +459,13 @@ function renderServices(){
       const grp=items.find(x=>x.kind==='group_other');
       if(grp){
         const det=document.createElement('details'); det.className='details';
-        det.innerHTML=`<summary class="pill"><span class="caret">▶</span> その他（クリックで展開）</summary>`;
+        det.innerHTML=`<summary class=\"pill\"><span class=\"caret\">▶</span> その他（クリックで展開）</summary>`;
         const inner=document.createElement('div'); inner.style.marginTop='.5rem';
         others.forEach(it=> inner.appendChild(renderServiceRow(it)));
         const addBox=document.createElement('div'); addBox.className='wrap'; addBox.style.marginTop='.5rem';
-        addBox.innerHTML=`<input id="custom-soft-name" type="text" placeholder="ソフト名" style="max-width:220px">
-          <input id="custom-soft-price" type="text" inputmode="numeric" data-commas placeholder="月額単価（±可）" style="max-width:150px">
-          <button class="btn sm" type="button" onclick="addCustomSoft()">追加</button>`;
+        addBox.innerHTML=`<input id=\"custom-soft-name\" type=\"text\" placeholder=\"ソフト名\" style=\"max-width:220px\">
+          <input id=\"custom-soft-price\" type=\"text\" inputmode=\"numeric\" data-commas placeholder=\"月額単価（±可）\" style=\"max-width:150px\">
+          <button class=\"btn sm\" type=\"button\" onclick=\"addCustomSoft()\">追加</button>`;
         inner.appendChild(addBox); det.appendChild(inner); bd.appendChild(det);
       }
       box.appendChild(bd); host.appendChild(box); return;
@@ -476,14 +481,15 @@ function renderServiceRow(it){
   const idx=services.indexOf(it); const id=`svc_${it.cat}_${idx}`;
   const row=document.createElement('div'); row.className='wrap'; row.style.justifyContent='space-between';
   const left=document.createElement('div'); left.style.flex='1';
-  left.innerHTML=`<label for="${id}" style="display:block">${it.name} <span class="mini">(${it.unit})</span></label><div class="mini">${it.note||''}</div>`;
+  left.innerHTML=`<label for=\"${id}\" style=\"display:block\">${it.name} <span class=\"mini\">(${it.unit})</span></label><div class=\"mini\">${it.note||''}</div>`;
   const right=document.createElement('div'); right.className='wrap';
-  let priceCtrl = `<span class="pill">単価 <b>${it.kind==='mult_m' ? '＝月次×'+it.months : yen(it.price)}</b></span>`;
-  if(it.kind==='asset_tax') priceCtrl=`<span class="pill">単価 <b>${yen(it.base)}＋${yen(it.extra)}×(件数-1)</b></span>`;
-  if(it.editablePrice){ priceCtrl=`<span class="pill">単価 <input type="text" inputmode="numeric" data-commas value="${fmt(it.price||0)}" style="width:120px" oninput="setPrice(${idx}, this.value)"></span>`; }
-  right.innerHTML=`${it.allowQty?`<input id="${id}_qty" type="text" inputmode="numeric" data-commas value="${fmt(it.qty||0)}" style="width:110px" oninput="setQty(${idx}, this.value)">`:`<span class="pill">${it.qty>0?'選択中':'数量固定'}</span>`}
+  let priceCtrl = `<span class=\"pill\">単価 <b>${it.kind==='mult_m' ? '＝月次×'+it.months : yen(it.price)}</b></span>`;
+  if(it.kind==='asset_tax') priceCtrl=`<span class=\"pill\">単価 <b>${yen(it.base)}＋${yen(it.extra)}×(件数-1)</b></span>`;
+  if(it.editablePrice){ priceCtrl=`<span class=\"pill\">単価 <input type=\"text\" inputmode=\"numeric\" data-commas value=\"${fmt(it.price||0)}\" style=\"width:120px\" oninput=\"setPrice(${idx}, this.value)\"></span>`; }
+  const qtyVal = (it.allowQty? (it.qty? fmt(it.qty):'') : '');
+  right.innerHTML=`${it.allowQty?`<input id=\"${id}_qty\" type=\"text\" inputmode=\"numeric\" data-commas value=\"${qtyVal}\" style=\"width:110px\" oninput=\"setQty(${idx}, this.value)\">`:`<span class=\"pill\">${it.qty>0?'選択中':'数量固定'}</span>`}
     ${priceCtrl}
-    ${it.kind!=='group_other'?`<input id="${id}" type="checkbox" ${it.qty>0?'checked':''} onchange="toggle(${idx}, this.checked)">`:''}`;
+    ${it.kind!=='group_other'?`<input id=\"${id}\" type=\"checkbox\" ${it.qty>0?'checked':''} onchange=\"toggle(${idx}, this.checked)\">`:''}`;
   row.appendChild(left); row.appendChild(right); return row;
 }
 
@@ -503,42 +509,54 @@ function addCustomSoft(){
 }
 
 function buildQuoteRows(){
-  const rows=[]; let m=0,o=0;
+  const rows=[];
   services.forEach(it=>{
     const q=+it.qty||0; if(!q || it.kind==='group_other') return;
-    let monthUnit=''; let yearSub=0;
+    let monthUnit=''; let yearSub=0; const isMonthly=(it.unit==='月額');
     if(it.kind==='mult_m'){
       const u=(services[0].price||0)*it.months; yearSub=u*q;
     }else if(it.kind==='per_qty'){
-      yearSub=(it.price||0)*q; // 人数×単価
+      yearSub=(it.price||0)*q;
     }else if(it.kind==='asset_tax'){
-      yearSub = q!==0 ? (it.base + Math.max(0, Math.abs(q)-1)*it.extra) * Math.sign(q||1) : 0; // 符号維持
-    }else{ // fixed（月額）
+      yearSub = q!==0 ? (it.base + Math.max(0, Math.abs(q)-1)*it.extra) * Math.sign(q||1) : 0;
+    }else{ // 月額
       monthUnit = yen(it.price||0);
       yearSub = (it.price||0) * 12 * q;
     }
-    rows.push({name:it.name, qty:q, monthUnit, yearSub, unit:it.unit});
-    if(it.unit==='月額') m+=yearSub; else o+=yearSub;
+    rows.push({name:it.name, qty:q, monthUnit, yearSub, unit:it.unit, cat:it.cat, isMonthly, isSoftware:(it.cat==='ソフトウェアレンタル'), isMonthlyAdvisor:/月次顧問料/.test(it.name)});
   });
-  return {rows, m, o};
+
+  // 調整をテーブルの行として追加（メモのみ表示、数量/単価は空）
+  if((adjust.amt||0) !== 0){
+    rows.push({name: (adjust.memo||'調整'), qty:'', monthUnit:'', yearSub: adjust.amt, unit:'', cat:'調整', isMonthly:false, isSoftware:false, isMonthlyAdvisor:false, isAdjustment:true});
+  }
+
+  // 並び替え：月次顧問料 → ソフト（月次） → その他月次 → それ以外
+  rows.sort((a,b)=>{
+    const pri = (r)=> r.isMonthlyAdvisor ? 0 : (r.isMonthly && r.isSoftware ? 1 : (r.isMonthly ? 2 : 3));
+    const da=pri(a), db=pri(b); if(da!==db) return da-db; return 0;
+  });
+
+  // 合計
+  const sum = rows.reduce((acc,r)=>acc+(r.yearSub||0),0);
+  return {rows,sum};
 }
 
 function renderQuote(){
   const qtbody=el('q-tbody'); qtbody.innerHTML='';
-  const {rows,m,o} = buildQuoteRows();
+  const {rows,sum} = buildQuoteRows();
   rows.forEach(r=>{
+    const isMonTarget = printMode && r.isMonthly && (r.isMonthlyAdvisor || r.isSoftware);
+    const qtyDisp = (r.qty==='')? '' : (isMonTarget? '12' : fmt(r.qty));
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r.name}</td><td>${fmt(r.qty)}</td><td>${r.monthUnit||''}</td><td>${yen(r.yearSub)}</td>`; qtbody.appendChild(tr);
+    tr.innerHTML=`<td>${r.name}</td><td>${qtyDisp}</td><td>${r.monthUnit||''}</td><td>${yen(r.yearSub)}</td>`; qtbody.appendChild(tr);
   });
-  const base = m + o + (adjust.amt||0);
-  const tax = Math.round(base*TAX);
-  const total = base + tax;
+  const tax = Math.round(sum*TAX);
+  const total = sum + tax;
   el('grand-tax-in').textContent = yen(total) + '（税込）';
   const box=el('q-totals'); box.innerHTML='';
   const row = (name,val,cls='')=>{ const div=document.createElement('div'); div.className='row '+cls; div.innerHTML=`<div class="name">${name}</div><div>${yen(val)}</div>`; return div; };
-  box.appendChild(row('小計', m+o));
-  const adjName = '調整（±）' + (adjust.memo? `：${adjust.memo}`:'');
-  box.appendChild(row(adjName, adjust.amt||0));
+  box.appendChild(row('小計', sum));
   box.appendChild(row('消費税 10%', tax));
   box.appendChild(row('合計金額', total, 'total'));
 }
@@ -566,14 +584,14 @@ function renderVaddSheet(){
 }
 
 /* 画面切替 */
-function showQuoteView(){ document.getElementById('view-input').classList.remove('active'); document.getElementById('view-quote').classList.add('active'); el('btn-go-quote').style.display='none'; el('btn-back-input').style.display='inline-flex'; }
-function showInputView(){ document.getElementById('view-quote').classList.remove('active'); document.getElementById('view-input').classList.add('active'); el('btn-back-input').style.display='none'; el('btn-go-quote').style.display='inline-flex'; }
+function showQuoteView(){ document.getElementById('view-input').style.display='none'; document.getElementById('view-quote').style.display='block'; el('btn-back-input').style.display='inline-flex'; window.scrollTo({top:0,behavior:'smooth'}); }
+function showInputView(){ document.getElementById('view-quote').style.display='none'; document.getElementById('view-input').style.display='block'; el('btn-back-input').style.display='none'; window.scrollTo({top:0,behavior:'smooth'}); }
 
 /* 事務所切替 */
 function applyOffice(key){
   const p = PRESET_OFFICES[key]||PRESET_OFFICES.kobe;
   el('issuer-name').textContent = p.name;
-  el('issuer-branch').textContent = p.branch;
+  el('issuer-branch').textContent = p.branch; // 【拠点】ラベルはscreen-onlyで印刷非表示
   el('issuer-addr').textContent = p.addr;
   el('issuer-tel').textContent = p.tel;
   el('issuer-rep').textContent = p.rep;
@@ -584,15 +602,8 @@ function setTab(which){
   const vBtn=el('tab-v'), sBtn=el('tab-s');
   vBtn.classList.toggle('active', which==='v');
   sBtn.classList.toggle('active', which==='s');
-  // モバイルでは表示切替、PCでは両方表示（CSSグリッド）
-  const mobile = window.matchMedia('(max-width: 999px)').matches;
-  if(mobile){
-    el('panel-v').style.display = which==='v' ? 'block':'none';
-    el('panel-s').style.display = which==='s' ? 'block':'none';
-  }else{
-    el('panel-v').style.display = 'block';
-    el('panel-s').style.display = 'block';
-  }
+  el('panel-v').style.display = which==='v' ? 'block':'none';
+  el('panel-s').style.display = which==='s' ? 'block':'none';
 }
 
 /* 印刷用ミラーの更新 */
@@ -605,43 +616,35 @@ function updatePrintMirror(){
   el('notes-view').innerHTML = notes;
 }
 
-/* 初期化 */
 (function init(){
-  const d=new Date(document.lastModified); el('cpy-year').textContent=String(new Date().getFullYear()); el('rev').textContent=APP_VER+'（'+d.toISOString().slice(0,10)+'）';
-  // 事件
+  const d=new Date(document.lastModified); document.getElementById('cpy-year').textContent=String(new Date().getFullYear()); document.getElementById('rev').textContent=APP_VER+'（'+d.toISOString().slice(0,10)+'）';
   document.getElementById('ent-corp').addEventListener('click',()=>setEnt('corp'));
   document.getElementById('ent-sole').addEventListener('click',()=>setEnt('sole'));
   document.getElementById('tab-v').addEventListener('click',()=>setTab('v'));
   document.getElementById('tab-s').addEventListener('click',()=>setTab('s'));
-  document.getElementById('btn-show-quote').addEventListener('click',()=>{ showQuoteView(); window.scrollTo({top:0,behavior:'smooth'}); });
-  document.getElementById('btn-go-quote').addEventListener('click',()=>{ showQuoteView(); window.scrollTo({top:0,behavior:'smooth'}); });
-  document.getElementById('btn-back-input').addEventListener('click',()=>{ showInputView(); });
+  document.getElementById('btn-show-quote').addEventListener('click',showQuoteView);
+  document.getElementById('btn-back-input').addEventListener('click',showInputView);
 
-  // 事務所切替
-  const issuerSel=el('issuer-select');
-  issuerSel?.addEventListener('change', (e)=>applyOffice(e.target.value));
+  const issuerSel=el('issuer-select'); issuerSel?.addEventListener('change', (e)=>applyOffice(e.target.value));
   applyOffice('kobe');
 
   // 調整
   bindCommaInput(el('adj-amt'));
   el('adj-memo').addEventListener('input', e=>{ adjust.memo=e.target.value||''; renderQuote(); });
   el('adj-amt').addEventListener('input', e=>{ adjust.amt=parseNum(e.target.value)||0; renderQuote(); });
+  el('adj-amt').value=''; // 初期は空欄
 
   // 入力フォーマッタ
   document.querySelectorAll('input[data-role="vadd"]').forEach(inp=>bindCommaInput(inp));
 
   updateEntUI(); loadServices(); renderBands(); recalc();
-
-  // デフォルト日付
   el('doc-date').value = (new Date()).toISOString().slice(0,10);
 
-  // 印刷直前：別紙生成＆印字値に変換
-  window.addEventListener('beforeprint', ()=>{ renderVaddSheet(); updatePrintMirror(); });
+  // 印刷前後の処理（数量=12の適用／解除）
+  window.addEventListener('beforeprint', ()=>{ printMode=true; renderVaddSheet(); updatePrintMirror(); renderQuote(); });
+  window.addEventListener('afterprint', ()=>{ printMode=false; renderQuote(); });
 
-  // 初回タブ設定（PCでは両面表示）
   setTab('v');
-  const resizeHandler=()=>{ setTab(document.getElementById('tab-s').classList.contains('active')?'s':'v'); };
-  window.addEventListener('resize', resizeHandler);
 })();
 </script>
 </body>
