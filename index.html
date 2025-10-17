@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>松本会計｜報酬見積ツール r4.10（入力初期値の空欄化）</title>
+<title>松本会計｜報酬見積ツール r4.11（御中/様・数量12反映・UI洗練）</title>
 <style>
 :root{
   --mk-bg:#f7fafc; --mk-card:#fff; --mk-ink:#1a202c; --mk-sub:#4a5568; --mk-border:#e2e8f0;
@@ -46,6 +46,18 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 /* サービス選択カード：PCは2カラム */
 #services{display:grid;gap:.8rem;grid-template-columns:1fr}
 @media(min-width:960px){#services{grid-template-columns:1fr 1fr}}
+
+/* サービス行のレイアウトを洗練 */
+.svc-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.6rem;align-items:center}
+.svc-main{min-width:0}
+.svc-main label{font-weight:600}
+.svc-main .mini{margin-top:.2rem}
+.svc-ctrls{display:flex;gap:.5rem;align-items:center;justify-content:flex-end}
+.svc-ctrls .pill{white-space:nowrap}
+@media(max-width:640px){
+  .svc-row{grid-template-columns:1fr}
+  .svc-ctrls{justify-content:flex-start;flex-wrap:wrap}
+}
 
 /* 見積様式（コンパクトフォント／項目を折返ししない） */
 .quote-wrap{background:#fff;border:1px solid #999;max-width:1000px;margin:0 auto}
@@ -112,7 +124,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
   <div class="bar">
     <div class="wrap" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
       <span class="title">報酬見積ツール</span>
-      <span class="badge">r4.10</span>
+      <span class="badge">r4.11</span>
       <span class="mini">松本会計｜画面切替</span>
       <div class="seg noprint" aria-label="区分切替">
         <button id="ent-corp">法人</button>
@@ -223,14 +235,14 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
         <div class="q-title">御　見　積　書</div>
         <div class="q-toprow">
           <div class="q-topbox">
-            <div class="row" style="font-size:14px"><strong id="to-line">（宛名未入力） 御中</strong></div>
+            <div class="row" style="font-size:14px"><strong id="to-line">（宛名未入力） <span id="addr-suf">御中</span></strong></div>
             <div class="row mini">下記の通りお見積もり申し上げます。</div>
           </div>
           <div class="q-topbox" style="text-align:right">
-            <div class="row screen-only"><span class="mini">見積日：</span><input id="doc-date" type="date" style="width:150px"></div>
-            <div class="row screen-only"><span class="mini">見積番号：</span><input id="doc-no" type="text" placeholder="例：20250205-01" style="width:150px"></div>
             <div class="row print-only">見積日：<span id="doc-date-print"></span></div>
             <div class="row print-only">見積番号：<span id="doc-no-print"></span></div>
+            <div class="row screen-only"><span class="mini">見積日：</span><input id="doc-date" type="date" style="width:150px"></div>
+            <div class="row screen-only"><span class="mini">見積番号：</span><input id="doc-no" type="text" placeholder="例：20250205-01" style="width:150px"></div>
           </div>
         </div>
         <div class="q-toprow" style="margin-top:6px">
@@ -275,8 +287,8 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
         </div>
       </div>
 
-      <div class="q-notes">
-        <div class="hd">備　考（自由入力可）</div>
+      <div class="q-notes" id="q-notes">
+        <div class="hd" id="notes-hd">備　考（自由入力可）</div>
         <div class="bd">
           <textarea id="notes-text" class="screen-only" placeholder="例：※ 株式会社TKCの財務会計システム『FXまいスタークラウド』を前提としています。"></textarea>
           <div id="notes-view" class="print-only"></div>
@@ -313,7 +325,7 @@ footer.mk-mini a{color:inherit;text-decoration:underline}
 </footer>
 
 <script>
-const APP_VER='r4.10';
+const APP_VER='r4.11';
 const TAX=0.10;
 const el = (id)=>document.getElementById(id);
 const fmt=(n)=> (isNaN(n)?0:n).toLocaleString('ja-JP');
@@ -322,6 +334,7 @@ const yen=(n)=>'¥'+fmt(Math.round(n||0));
 let ent = localStorage.getItem('mk_ent')||'corp';
 let adjust = {memo:'', amt:0};
 let printMode=false; // 印刷時は月次数量=12表示
+let quoteMode=false; // 見積画面表示時も数量12を表示
 
 const PRESET_OFFICES={
   kobe:{ name:'税理士法人松本会計事務所', branch:'【神戸事務所】', addr:'651-0086 神戸市中央区磯上通8-1-1-7F', tel:'078-242-2177', rep:'代表社員 松本考史' },
@@ -368,8 +381,8 @@ const servicesMaster=[
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX4クラウド", unit:"月額", kind:"fixed", price:60000, qty:0, allowQty:false, editablePrice:true},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX2クラウド", unit:"月額", kind:"fixed", price:15000, qty:0, allowQty:false, editablePrice:true},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FXまいスタークラウド", unit:"月額", kind:"fixed", price:12000, qty:0, allowQty:false, editablePrice:true},
-  {ent:'both',cat:"ソフトウェアレンタル", name:"（その他）", unit:"月額", kind:"group_other", price:0, qty:0, allowQty:false, note:"クリックで展開"},
-  {ent:'both',cat:"ソフトウェアレンタル", name:"PX4クラウド", unit:"月額", kind:"fixed", price:0, qty:0, allowQty:false, editablePrice:true, swOther:true}
+  {ent:'both',cat:"ソフトウェアレンタル", name:"（その他）", unit:"月額", kind:"group_other", price:0, qty:0, allowQty:false, note:"クリックで展開"}
+  // PX4クラウドは削除
 ];
 let services=[];
 function resetServices(){ services = servicesMaster.filter(s=>s.ent==='both'||s.ent===ent).map(s=>({...s})); }
@@ -394,7 +407,7 @@ function bindCommaInput(input){
   input.addEventListener('blur', formatNow);
 }
 
-function setEnt(v){ ent=v; localStorage.setItem('mk_ent',ent); updateEntUI(); renderBands(); recalc(); }
+function setEnt(v){ ent=v; localStorage.setItem('mk_ent',ent); updateEntUI(); renderBands(); recalc(); updatePrintMirror(); }
 window.setEnt=setEnt;
 
 function updateEntUI(){
@@ -402,6 +415,8 @@ function updateEntUI(){
   document.getElementById('ent-sole').classList.toggle('active', ent==='sole');
   el('ent-label').textContent=ent==='corp'?'法人':'個人';
   el('ent-label2').textContent=ent==='corp'?'法人':'個人';
+  // 宛名末尾の初期表示も更新
+  el('addr-suf').textContent = (ent==='corp')?'御中':'様';
 }
 
 function renderBands(){
@@ -463,9 +478,7 @@ function renderServices(){
         const inner=document.createElement('div'); inner.style.marginTop='.5rem';
         others.forEach(it=> inner.appendChild(renderServiceRow(it)));
         const addBox=document.createElement('div'); addBox.className='wrap'; addBox.style.marginTop='.5rem';
-        addBox.innerHTML=`<input id=\"custom-soft-name\" type=\"text\" placeholder=\"ソフト名\" style=\"max-width:220px\">
-          <input id=\"custom-soft-price\" type=\"text\" inputmode=\"numeric\" data-commas placeholder=\"月額単価（±可）\" style=\"max-width:150px\">
-          <button class=\"btn sm\" type=\"button\" onclick=\"addCustomSoft()\">追加</button>`;
+        addBox.innerHTML=`<input id=\"custom-soft-name\" type=\"text\" placeholder=\"ソフト名\" style=\"max-width:220px\">\n          <input id=\"custom-soft-price\" type=\"text\" inputmode=\"numeric\" data-commas placeholder=\"月額単価（±可）\" style=\"max-width:150px\">\n          <button class=\"btn sm\" type=\"button\" onclick=\"addCustomSoft()\">追加</button>`;
         inner.appendChild(addBox); det.appendChild(inner); bd.appendChild(det);
       }
       box.appendChild(bd); host.appendChild(box); return;
@@ -479,18 +492,19 @@ function renderServices(){
 
 function renderServiceRow(it){
   const idx=services.indexOf(it); const id=`svc_${it.cat}_${idx}`;
-  const row=document.createElement('div'); row.className='wrap'; row.style.justifyContent='space-between';
-  const left=document.createElement('div'); left.style.flex='1';
-  left.innerHTML=`<label for=\"${id}\" style=\"display:block\">${it.name} <span class=\"mini\">(${it.unit})</span></label><div class=\"mini\">${it.note||''}</div>`;
-  const right=document.createElement('div'); right.className='wrap';
+  const row=document.createElement('div'); row.className='svc-row';
+  const left=document.createElement('div'); left.className='svc-main';
+  left.innerHTML=`<label for=\"${id}\">${it.name} <span class=\"mini\">(${it.unit})</span></label>${it.note?`<div class=\"mini\">${it.note}</div>`:''}`;
+  const ctrls=document.createElement('div'); ctrls.className='svc-ctrls';
   let priceCtrl = `<span class=\"pill\">単価 <b>${it.kind==='mult_m' ? '＝月次×'+it.months : yen(it.price)}</b></span>`;
   if(it.kind==='asset_tax') priceCtrl=`<span class=\"pill\">単価 <b>${yen(it.base)}＋${yen(it.extra)}×(件数-1)</b></span>`;
   if(it.editablePrice){ priceCtrl=`<span class=\"pill\">単価 <input type=\"text\" inputmode=\"numeric\" data-commas value=\"${fmt(it.price||0)}\" style=\"width:120px\" oninput=\"setPrice(${idx}, this.value)\"></span>`; }
   const qtyVal = (it.allowQty? (it.qty? fmt(it.qty):'') : '');
-  right.innerHTML=`${it.allowQty?`<input id=\"${id}_qty\" type=\"text\" inputmode=\"numeric\" data-commas value=\"${qtyVal}\" style=\"width:110px\" oninput=\"setQty(${idx}, this.value)\">`:`<span class=\"pill\">${it.qty>0?'選択中':'数量固定'}</span>`}
-    ${priceCtrl}
-    ${it.kind!=='group_other'?`<input id=\"${id}\" type=\"checkbox\" ${it.qty>0?'checked':''} onchange=\"toggle(${idx}, this.checked)\">`:''}`;
-  row.appendChild(left); row.appendChild(right); return row;
+  const qtyCtrl = it.allowQty ? `<input id=\"${id}_qty\" type=\"text\" inputmode=\"numeric\" data-commas value=\"${qtyVal}\" style=\"width:110px\" oninput=\"setQty(${idx}, this.value)\">` : `<span class=\"pill\">${it.qty>0?'選択中':'数量固定'}</span>`;
+  const checkCtrl = it.kind!=='group_other' ? `<input id=\"${id}\" type=\"checkbox\" ${it.qty>0?'checked':''} onchange=\"toggle(${idx}, this.checked)\">` : '';
+  ctrls.innerHTML = `${qtyCtrl} ${priceCtrl} ${checkCtrl}`;
+  row.appendChild(left); row.appendChild(ctrls);
+  return row;
 }
 
 function toggle(i,on){ const it=services[i]; if(it.allowQty){ it.qty=on?(it.qty||1):0; } else{ it.qty=on?1:0; } renderQuote(); }
@@ -546,7 +560,7 @@ function renderQuote(){
   const qtbody=el('q-tbody'); qtbody.innerHTML='';
   const {rows,sum} = buildQuoteRows();
   rows.forEach(r=>{
-    const isMonTarget = printMode && r.isMonthly && (r.isMonthlyAdvisor || r.isSoftware);
+    const isMonTarget = (quoteMode || printMode) && r.isMonthly && (r.isMonthlyAdvisor || r.isSoftware);
     const qtyDisp = (r.qty==='')? '' : (isMonTarget? '12' : fmt(r.qty));
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${r.name}</td><td>${qtyDisp}</td><td>${r.monthUnit||''}</td><td>${yen(r.yearSub)}</td>`; qtbody.appendChild(tr);
@@ -555,7 +569,7 @@ function renderQuote(){
   const total = sum + tax;
   el('grand-tax-in').textContent = yen(total) + '（税込）';
   const box=el('q-totals'); box.innerHTML='';
-  const row = (name,val,cls='')=>{ const div=document.createElement('div'); div.className='row '+cls; div.innerHTML=`<div class="name">${name}</div><div>${yen(val)}</div>`; return div; };
+  const row = (name,val,cls='')=>{ const div=document.createElement('div'); div.className='row '+cls; div.innerHTML=`<div class=\"name\">${name}</div><div>${yen(val)}</div>`; return div; };
   box.appendChild(row('小計', sum));
   box.appendChild(row('消費税 10%', tax));
   box.appendChild(row('合計金額', total, 'total'));
@@ -573,7 +587,7 @@ function renderVaddSheet(){
   rows.forEach(([label,id])=>{
     const tr=document.createElement('tr');
     const val = id==='const_3m'? 3000000 : getVal(id);
-    tr.innerHTML = `<td>${label}</td><td style="text-align:right">${yen(val)}</td>`;
+    tr.innerHTML = `<td>${label}</td><td style=\"text-align:right\">${yen(val)}</td>`;
     tb.appendChild(tr);
   });
   const v=calcVadd();
@@ -584,8 +598,22 @@ function renderVaddSheet(){
 }
 
 /* 画面切替 */
-function showQuoteView(){ document.getElementById('view-input').style.display='none'; document.getElementById('view-quote').style.display='block'; el('btn-back-input').style.display='inline-flex'; window.scrollTo({top:0,behavior:'smooth'}); }
-function showInputView(){ document.getElementById('view-quote').style.display='none'; document.getElementById('view-input').style.display='block'; el('btn-back-input').style.display='none'; window.scrollTo({top:0,behavior:'smooth'}); }
+function showQuoteView(){
+  document.getElementById('view-input').style.display='none';
+  document.getElementById('view-quote').style.display='block';
+  el('btn-back-input').style.display='inline-flex';
+  quoteMode=true; // 見積画面では数量12表示
+  updatePrintMirror();
+  renderQuote();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function showInputView(){
+  document.getElementById('view-quote').style.display='none';
+  document.getElementById('view-input').style.display='block';
+  el('btn-back-input').style.display='none';
+  quoteMode=false;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 
 /* 事務所切替 */
 function applyOffice(key){
@@ -606,14 +634,16 @@ function setTab(which){
   el('panel-s').style.display = which==='s' ? 'block':'none';
 }
 
-/* 印刷用ミラーの更新 */
+/* 印刷用ミラーの更新（御中/様を区分で切替） */
 function updatePrintMirror(){
   const t=(el('client-name')?.value||'').trim();
-  el('to-line').textContent = t? `${t} 御中`:'（宛名未入力） 御中';
+  const suf = (ent==='corp')? '御中':'様';
+  el('addr-suf').textContent = suf;
+  el('to-line').innerHTML = (t? `${t} <span id=\"addr-suf\">${suf}</span>` : `（宛名未入力） <span id=\"addr-suf\">${suf}</span>`);
   el('doc-date-print').textContent = el('doc-date')?.value || '';
   el('doc-no-print').textContent = el('doc-no')?.value || '';
-  const notes=(el('notes-text')?.value||'').replace(/\n/g,'<br>');
-  el('notes-view').innerHTML = notes;
+  const notes=(el('notes-text')?.value||'').trim();
+  el('notes-view').innerHTML = notes.replace(/\n/g,'<br>');
 }
 
 (function init(){
@@ -640,9 +670,22 @@ function updatePrintMirror(){
   updateEntUI(); loadServices(); renderBands(); recalc();
   el('doc-date').value = (new Date()).toISOString().slice(0,10);
 
-  // 印刷前後の処理（数量=12の適用／解除）
-  window.addEventListener('beforeprint', ()=>{ printMode=true; renderVaddSheet(); updatePrintMirror(); renderQuote(); });
-  window.addEventListener('afterprint', ()=>{ printMode=false; renderQuote(); });
+  // 印刷前後の処理（数量=12の適用／解除、備考の見出し変更＆空欄時非表示）
+  window.addEventListener('beforeprint', ()=>{
+    printMode=true; renderVaddSheet(); updatePrintMirror(); renderQuote();
+    // 備考見出しを「備　考」に変更
+    el('notes-hd').textContent='備　考';
+    // 空欄なら備考セクション非表示
+    const empty = (el('notes-text')?.value||'').trim()==='';
+    el('q-notes').style.display = empty ? 'none' : 'block';
+  });
+  window.addEventListener('afterprint', ()=>{
+    printMode=false; renderQuote();
+    // 見出しを戻す
+    el('notes-hd').textContent='備　考（自由入力可)'.replace(')', '\）').replace('(', '\（');
+    // 画面では常に表示（入力可能状態）
+    el('q-notes').style.display = 'block';
+  });
 
   setTab('v');
 })();
