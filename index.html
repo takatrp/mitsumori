@@ -54,6 +54,11 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 .svc-meta{display:flex;gap:.4rem;align-items:center;margin-top:.25rem;flex-wrap:wrap}
 .svc-ctrls{display:flex;gap:.5rem;align-items:center;justify-content:flex-end;flex-wrap:wrap}
 
+.income-table{width:100%;border-collapse:collapse}
+.income-table th,.income-table td{border:1px solid var(--line);padding:.45rem .55rem;vertical-align:top}
+.income-table th{background:#2d5f6e;color:#fff}
+.income-table td:nth-child(1),.income-table td:nth-child(3){white-space:nowrap}
+
 /* i（説明） */
 .details.info{display:inline-block;position:relative}
 .details.info>summary{border:1px solid var(--mk-border);border-radius:999px;padding:.02rem .45rem;font-weight:900;background:#f1f5f9;user-select:none}
@@ -144,6 +149,7 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
       <div class="seg noprint" aria-label="区分切替">
         <button id="ent-corp">法人</button>
         <button id="ent-sole">個人</button>
+        <button id="ent-income">所得税確定申告</button>
       </div>
       <span class="mini">（顧客向け：見積＋付加価値／社内印刷：原価分析付き）</span>
     </div>
@@ -225,6 +231,36 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
         <div class="panel" id="panel-s" style="margin-top:1rem;display:none">
           <div class="mini">必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。<span class="pill">区分：<b id="ent-label2">法人</b></span></div>
           <div class="divider"></div>
+
+          <div class="card" id="income-guide" style="display:none;margin-bottom:.8rem">
+            <div class="hd"><strong>所得税確定申告報酬 価格表（所内用・叩き台）</strong></div>
+            <div class="bd">
+              <div class="mini" style="margin-bottom:.5rem">基本報酬＋加算項目＋調整項目で算定。金額は税抜です。</div>
+              <table class="income-table">
+                <thead><tr><th>区分</th><th>項目</th><th>報酬額（税抜）</th><th>備考</th></tr></thead>
+                <tbody>
+                  <tr><td>基本報酬</td><td>所得税確定申告 基本報酬</td><td>30,000円</td><td>給与・年金・医療費・寄附金控除等の一般申告</td></tr>
+                  <tr><td>加算項目</td><td>不動産所得加算</td><td>20,000円</td><td>収支内訳書又は青色申告決算書の作成を要するもの</td></tr>
+                  <tr><td>加算項目</td><td>物件数加算（2件目以降）</td><td>5,000円／件</td><td>賃貸物件・駐車場等が複数ある場合</td></tr>
+                  <tr><td>加算項目</td><td>減価償却・借入金確認加算</td><td>5,000円</td><td>減価償却資産明細、借入金利子、修繕費等の確認を要する場合</td></tr>
+                  <tr><td>加算項目</td><td>株式譲渡加算</td><td>20,000円</td><td>上場株式等の譲渡所得計算を要する場合</td></tr>
+                  <tr><td>加算項目</td><td>土地建物等譲渡所得加算</td><td>50,000円〜</td><td>取得費・譲渡費用・特例判定等を要するもの</td></tr>
+                  <tr><td>加算項目</td><td>相続財産取得費加算の特例加算</td><td>30,000円〜</td><td>相続財産を譲渡した場合の取得費加算の特例</td></tr>
+                  <tr><td>加算項目</td><td>初年度受託加算</td><td>10,000円</td><td>資料整理・前提確認に手間を要する場合</td></tr>
+                  <tr><td>加算項目</td><td>青色申告承認申請書提出</td><td>5,000円</td><td>新規に青色申告承認申請書を提出する場合</td></tr>
+                  <tr><td>住宅ローン控除</td><td>住宅ローン控除（初年度）</td><td>20,000円</td><td>通常の初年度申告。計算明細書・残高証明書等の確認を含む</td></tr>
+                  <tr><td>住宅ローン控除</td><td>住宅ローン控除（初年度・認定住宅等）</td><td>25,000〜30,000円</td><td>認定住宅、補助金確認、添付資料が多い場合</td></tr>
+                  <tr><td>住宅ローン控除</td><td>住宅ローン控除（2年目以降）</td><td>5,000〜10,000円</td><td>年末調整で処理できない場合の確定申告対応</td></tr>
+                  <tr><td>住宅ローン控除</td><td>年調書類確認のみ</td><td>3,000〜5,000円</td><td>申告作成を伴わない軽微対応</td></tr>
+                  <tr><td>調整項目</td><td>同時受託調整</td><td>▲5,000〜▲10,000円</td><td>夫婦・親族等で同時受託する場合の配慮</td></tr>
+                  <tr><td>調整項目</td><td>資料整理済み調整</td><td>▲5,000円</td><td>Excel等で収入・経費が整理済みで確認中心の場合</td></tr>
+                  <tr><td>調整項目</td><td>資料不備・再整理対応加算</td><td>5,000〜10,000円</td><td>資料不足、再集計、問い合わせ往復が多い場合</td></tr>
+                </tbody>
+              </table>
+              <div class="mini" style="margin-top:.5rem">注記：値引きは原則「同時受託調整」又は「資料整理済み調整」で処理し、項目別単価は崩さない運用を想定。</div>
+            </div>
+          </div>
+
           <div id="services"></div>
 
           <div class="divider"></div>
@@ -554,13 +590,17 @@ function setEnt(v){ ent=v; localStorage.setItem('mk_ent',ent); updateEntUI(); re
 function updateEntUI(){
   el('ent-corp').classList.toggle('active', ent==='corp');
   el('ent-sole').classList.toggle('active', ent==='sole');
-  el('ent-label').textContent=ent==='corp'?'法人':'個人';
-  el('ent-label2').textContent=ent==='corp'?'法人':'個人';
+  el('ent-income').classList.toggle('active', ent==='income');
+  const label = ent==='corp' ? '法人' : (ent==='sole' ? '個人' : '所得税確定申告');
+  el('ent-label').textContent=label;
+  el('ent-label2').textContent=label;
   el('addr-suf').textContent = (ent==='corp')?'御中':'様';
+  el('income-guide').style.display = ent==='income' ? 'block' : 'none';
 }
 
 function renderBands(){
   const tbody = document.querySelector('#bands tbody'); tbody.innerHTML='';
+  if(ent==='income') return;
   (ent==='corp'?bandsCorp:bandsSole).forEach(x=>{
     const tr=document.createElement('tr');
     const label = x.max===Infinity? `${fmt(x.min)}円超` : `${fmt(x.min)}〜${fmt(x.max)}円`;
@@ -571,26 +611,39 @@ function renderBands(){
 
 function getVal(id){ return num0(el(id).value); }
 function calcVadd(){
+  if(ent==='income') return 0;
   if(ent==='corp'){
     return getVal('c_ordinary')+getVal('c_labor')+getVal('c_int')+getVal('c_rent')+getVal('c_lease')+getVal('c_tax')+getVal('c_dep');
   }else{
     return getVal('s_preprofit')+getVal('s_family')+getVal('s_labor')+getVal('s_int')+getVal('s_rent')+getVal('s_lease')+getVal('s_tax')+getVal('s_dep')+3000000;
   }
 }
-function bandFee(v){ const arr=ent==='corp'?bandsCorp:bandsSole; for(const x of arr){ if(v>=x.min && v<x.max) return x.fee; } return null; }
+function bandFee(v){
+  if(ent==='income') return 0;
+  const arr=ent==='corp'?bandsCorp:bandsSole;
+  for(const x of arr){ if(v>=x.min && v<x.max) return x.fee; }
+  return null;
+}
 
 function recalc(){
   const corp=ent==='corp';
+  const income=ent==='income';
   el('calc-corp').style.display=corp?'block':'none';
-  el('calc-sole').style.display=corp?'none':'block';
+  el('calc-sole').style.display=(!corp && !income)?'block':'none';
+  el('bandsWrap').style.display=income?'none':'block';
 
   const v=calcVadd();
   el('vadd').textContent=fmt(v);
   const fee=bandFee(v)||0;
   el('monthly').textContent=yen(fee);
-  const arr = ent==='corp'?bandsCorp:bandsSole;
-  const band=arr.find(x=>v>=x.min&&v<x.max);
-  el('band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  if(income){
+    el('band').textContent='該当なし';
+    el('monthly').textContent='¥0';
+  }else{
+    const arr = ent==='corp'?bandsCorp:bandsSole;
+    const band=arr.find(x=>v>=x.min&&v<x.max);
+    el('band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  }
 
   if(services.length && services[0].cat==='月次顧問') services[0].price=fee;
   renderQuote();
@@ -606,8 +659,10 @@ function setTab(which){
 
 function renderServices(){
   const host=el('services'); host.innerHTML='';
-  const orderCorp=["月次顧問","ソフトウェアレンタル","決算・申告（法人）","年末調整","償却資産税申告"]; const orderSole=["月次顧問","ソフトウェアレンタル","個人確定申告","年末調整","償却資産税申告"];
-  const order=ent==='corp'?orderCorp:orderSole;
+  const orderCorp=["月次顧問","ソフトウェアレンタル","決算・申告（法人）","年末調整","償却資産税申告"];
+  const orderSole=["月次顧問","ソフトウェアレンタル","個人確定申告","年末調整","償却資産税申告"];
+  const orderIncome=["所得税確定申告"];
+  const order=ent==='corp'?orderCorp:(ent==='sole'?orderSole:orderIncome);
   const cats=[...new Set(services.map(x=>x.cat))].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
 
   cats.forEach(c=>{
@@ -829,15 +884,19 @@ function updatePrintMirror(){
 
 /* 付加価値 別紙 */
 function renderVaddSheet(){
-  el('vadd-ent').textContent = ent==='corp'?'法人':'個人';
+  el('vadd-ent').textContent = ent==='corp'?'法人':(ent==='sole'?'個人':'所得税確定申告');
   el('vadd-formula').textContent = ent==='corp'
     ? '経常利益＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費'
-    : '青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000';
+    : (ent==='sole'
+      ? '青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000'
+      : '（所得税確定申告は本票の対象外）');
 
   const tb=el('vadd-tbody'); tb.innerHTML='';
   const rows = ent==='corp'
     ? [ ['経常利益','c_ordinary'],['人件費','c_labor'],['支払利息','c_int'],['賃借料','c_rent'],['リース料','c_lease'],['租税公課','c_tax'],['減価償却費','c_dep'] ]
-    : [ ['青色控除前利益','s_preprofit'],['青色専従者給与','s_family'],['人件費','s_labor'],['支払利息','s_int'],['賃借料','s_rent'],['リース料','s_lease'],['租税公課','s_tax'],['減価償却費','s_dep'],['加算','const_3m'] ];
+    : (ent==='sole'
+      ? [ ['青色控除前利益','s_preprofit'],['青色専従者給与','s_family'],['人件費','s_labor'],['支払利息','s_int'],['賃借料','s_rent'],['リース料','s_lease'],['租税公課','s_tax'],['減価償却費','s_dep'],['加算','const_3m'] ]
+      : []);
 
   rows.forEach(([label,id])=>{
     const tr=document.createElement('tr');
@@ -850,8 +909,8 @@ function renderVaddSheet(){
   const fee=bandFee(v)||0;
   el('vadd-sum').textContent=fmt(v);
   const arr=ent==='corp'?bandsCorp:bandsSole;
-  const band=arr.find(x=>v>=x.min&&v<x.max);
-  el('vadd-band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  const band=ent==='income' ? null : arr.find(x=>v>=x.min&&v<x.max);
+  el('vadd-band').textContent = ent==='income' ? '該当なし' : (band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—');
   el('vadd-monthly').textContent = yen(fee);
 }
 
@@ -1056,6 +1115,7 @@ function addPctLine(){
   // 区分
   el('ent-corp').addEventListener('click',()=>setEnt('corp'));
   el('ent-sole').addEventListener('click',()=>setEnt('sole'));
+  el('ent-income').addEventListener('click',()=>setEnt('income'));
 
   // タブ
   el('tab-v').addEventListener('click',()=>setTab('v'));
