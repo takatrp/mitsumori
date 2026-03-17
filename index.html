@@ -144,6 +144,7 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
       <div class="seg noprint" aria-label="区分切替">
         <button id="ent-corp">法人</button>
         <button id="ent-sole">個人</button>
+        <button id="ent-income">所得税確定申告</button>
       </div>
       <span class="mini">（顧客向け：見積＋付加価値／社内印刷：原価分析付き）</span>
     </div>
@@ -161,8 +162,8 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
   <section id="view-input" class="view active">
     <div id="input-col" class="card">
       <div class="hd">
-        <strong>入力（付加価値額→月次顧問料 / サービス選択）</strong>
-        <div class="seg noprint">
+        <strong id="input-title">入力（付加価値額→月次顧問料 / サービス選択）</strong>
+        <div class="seg noprint" id="input-tabs">
           <button id="tab-v" class="active">付加価値</button>
           <button id="tab-s">サービス選択</button>
         </div>
@@ -223,8 +224,9 @@ header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,#fff,r
 
         <!-- サービス選択 -->
         <div class="panel" id="panel-s" style="margin-top:1rem;display:none">
-          <div class="mini">必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。<span class="pill">区分：<b id="ent-label2">法人</b></span></div>
+          <div class="mini" id="services-intro">必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。<span class="pill">区分：<b id="ent-label2">法人</b></span></div>
           <div class="divider"></div>
+
           <div id="services"></div>
 
           <div class="divider"></div>
@@ -518,11 +520,32 @@ const servicesMaster=[
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX4クラウド", unit:"月額", kind:"fixed", price:60000, qty:0, allowQty:false, editablePrice:true},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FX2クラウド", unit:"月額", kind:"fixed", price:15000, qty:0, allowQty:false, editablePrice:true},
   {ent:'both',cat:"ソフトウェアレンタル", name:"FXまいスタークラウド", unit:"月額", kind:"fixed", price:12000, qty:0, allowQty:false, editablePrice:true},
-  {ent:'both',cat:"ソフトウェアレンタル", name:"（その他）", unit:"月額", kind:"group_other", price:0, qty:0, allowQty:false, note:"クリックで展開"}
+  {ent:'both',cat:"ソフトウェアレンタル", name:"（その他）", unit:"月額", kind:"group_other", price:0, qty:0, allowQty:false, note:"クリックで展開"},
+
+  {ent:'income',cat:"所得税確定申告", name:"所得税確定申告 基本報酬", unit:"スポット", kind:"spot", price:30000, qty:0, allowQty:false, note:"給与・年金・医療費・寄附金控除等の一般申告"},
+  {ent:'income',cat:"所得税確定申告", name:"不動産所得加算", unit:"スポット", kind:"spot", price:20000, qty:0, allowQty:false, note:"収支内訳書又は青色申告決算書の作成を要するもの"},
+  {ent:'income',cat:"所得税確定申告", name:"物件数加算（2件目以降）", unit:"スポット", kind:"per_qty", price:5000, qty:null, allowQty:true, note:"賃貸物件・駐車場等が複数ある場合（5,000円／件）"},
+  {ent:'income',cat:"所得税確定申告", name:"減価償却・借入金確認加算", unit:"スポット", kind:"spot", price:5000, qty:0, allowQty:false, note:"減価償却資産明細、借入金利子、修繕費等の確認を要する場合"},
+  {ent:'income',cat:"所得税確定申告", name:"株式譲渡加算", unit:"スポット", kind:"spot", price:20000, qty:0, allowQty:false, note:"上場株式等の譲渡所得計算を要する場合"},
+  {ent:'income',cat:"所得税確定申告", name:"土地建物等譲渡所得加算", unit:"スポット", kind:"spot", price:50000, qty:0, allowQty:false, editablePrice:true, note:"取得費・譲渡費用・特例判定等を要するもの（50,000円〜）"},
+  {ent:'income',cat:"所得税確定申告", name:"相続財産取得費加算の特例加算", unit:"スポット", kind:"spot", price:30000, qty:0, allowQty:false, editablePrice:true, note:"相続財産を譲渡した場合の取得費加算の特例（30,000円〜）"},
+  {ent:'income',cat:"所得税確定申告", name:"初年度受託加算", unit:"スポット", kind:"spot", price:10000, qty:0, allowQty:false, note:"資料整理・前提確認に手間を要する場合"},
+  {ent:'income',cat:"所得税確定申告", name:"青色申告承認申請書提出", unit:"スポット", kind:"spot", price:5000, qty:0, allowQty:false, note:"新規に青色申告承認申請書を提出する場合"},
+  {ent:'income',cat:"所得税確定申告", name:"住宅ローン控除（初年度）", unit:"スポット", kind:"spot", price:20000, qty:0, allowQty:false, note:"通常の初年度申告。計算明細書・残高証明書等の確認を含む"},
+  {ent:'income',cat:"所得税確定申告", name:"住宅ローン控除（初年度・認定住宅等）", unit:"スポット", kind:"spot", price:25000, qty:0, allowQty:false, editablePrice:true, note:"認定住宅、補助金確認、添付資料が多い場合（25,000〜30,000円）"},
+  {ent:'income',cat:"所得税確定申告", name:"住宅ローン控除（2年目以降）", unit:"スポット", kind:"spot", price:5000, qty:0, allowQty:false, editablePrice:true, note:"年末調整で処理できない場合の確定申告対応（5,000〜10,000円）"},
+  {ent:'income',cat:"所得税確定申告", name:"年調書類確認のみ", unit:"スポット", kind:"spot", price:3000, qty:0, allowQty:false, editablePrice:true, note:"申告作成を伴わない軽微対応（3,000〜5,000円）"},
+  {ent:'income',cat:"所得税確定申告", name:"同時受託調整", unit:"スポット", kind:"spot", price:-5000, qty:0, allowQty:false, editablePrice:true, note:"夫婦・親族等で同時受託する場合の配慮（▲5,000〜▲10,000円）"},
+  {ent:'income',cat:"所得税確定申告", name:"資料整理済み調整", unit:"スポット", kind:"spot", price:-5000, qty:0, allowQty:false, note:"Excel等で収入・経費が整理済みで確認中心の場合（▲5,000円）"},
+  {ent:'income',cat:"所得税確定申告", name:"資料不備・再整理対応加算", unit:"スポット", kind:"spot", price:5000, qty:0, allowQty:false, editablePrice:true, note:"資料不足、再集計、問い合わせ往復が多い場合（5,000〜10,000円）"}
 ];
 
 let services=[];
-function resetServices(){ services = servicesMaster.filter(s=>s.ent==='both'||s.ent===ent).map(s=>({...s})); }
+function resetServices(){
+  services = servicesMaster
+    .filter(s=> ent==='income' ? s.ent==='income' : (s.ent==='both'||s.ent===ent))
+    .map(s=>({...s}));
+}
 
 function parseNum(str){
   const s=(String(str||'')).replace(/,/g,'').trim();
@@ -549,18 +572,38 @@ function bindCommaInput(input){
   input.addEventListener('blur', formatNow);
 }
 
-function setEnt(v){ ent=v; localStorage.setItem('mk_ent',ent); updateEntUI(); renderBands(); resetServices(); recalc(); renderServices(); renderQuote(); recalcCost(); updatePrintMirror(); }
+function setEnt(v){
+  ent=v;
+  localStorage.setItem('mk_ent',ent);
+  updateEntUI();
+  if(ent==='income') setTab('s');
+  renderBands();
+  resetServices();
+  recalc();
+  renderServices();
+  renderQuote();
+  recalcCost();
+  updatePrintMirror();
+}
 
 function updateEntUI(){
   el('ent-corp').classList.toggle('active', ent==='corp');
   el('ent-sole').classList.toggle('active', ent==='sole');
-  el('ent-label').textContent=ent==='corp'?'法人':'個人';
-  el('ent-label2').textContent=ent==='corp'?'法人':'個人';
+  el('ent-income').classList.toggle('active', ent==='income');
+  const label = ent==='corp' ? '法人' : (ent==='sole' ? '個人' : '所得税確定申告');
+  el('ent-label').textContent=label;
+  el('ent-label2').textContent=label;
   el('addr-suf').textContent = (ent==='corp')?'御中':'様';
+  el('input-title').textContent = ent==='income' ? '入力（所得税確定申告）' : '入力（付加価値額→月次顧問料 / サービス選択）';
+  el('input-tabs').style.display = ent==='income' ? 'none' : 'flex';
+  el('services-intro').textContent = ent==='income'
+    ? '必要な項目にチェック／数量入力して積算します（所得税確定申告）。'
+    : '必要な項目にチェック／数量入力（下記の一部は「月次顧問料」を基礎に自動算定します）。';
 }
 
 function renderBands(){
   const tbody = document.querySelector('#bands tbody'); tbody.innerHTML='';
+  if(ent==='income') return;
   (ent==='corp'?bandsCorp:bandsSole).forEach(x=>{
     const tr=document.createElement('tr');
     const label = x.max===Infinity? `${fmt(x.min)}円超` : `${fmt(x.min)}〜${fmt(x.max)}円`;
@@ -571,26 +614,39 @@ function renderBands(){
 
 function getVal(id){ return num0(el(id).value); }
 function calcVadd(){
+  if(ent==='income') return 0;
   if(ent==='corp'){
     return getVal('c_ordinary')+getVal('c_labor')+getVal('c_int')+getVal('c_rent')+getVal('c_lease')+getVal('c_tax')+getVal('c_dep');
   }else{
     return getVal('s_preprofit')+getVal('s_family')+getVal('s_labor')+getVal('s_int')+getVal('s_rent')+getVal('s_lease')+getVal('s_tax')+getVal('s_dep')+3000000;
   }
 }
-function bandFee(v){ const arr=ent==='corp'?bandsCorp:bandsSole; for(const x of arr){ if(v>=x.min && v<x.max) return x.fee; } return null; }
+function bandFee(v){
+  if(ent==='income') return 0;
+  const arr=ent==='corp'?bandsCorp:bandsSole;
+  for(const x of arr){ if(v>=x.min && v<x.max) return x.fee; }
+  return null;
+}
 
 function recalc(){
   const corp=ent==='corp';
+  const income=ent==='income';
   el('calc-corp').style.display=corp?'block':'none';
-  el('calc-sole').style.display=corp?'none':'block';
+  el('calc-sole').style.display=(!corp && !income)?'block':'none';
+  el('bandsWrap').style.display=income?'none':'block';
 
   const v=calcVadd();
   el('vadd').textContent=fmt(v);
   const fee=bandFee(v)||0;
   el('monthly').textContent=yen(fee);
-  const arr = ent==='corp'?bandsCorp:bandsSole;
-  const band=arr.find(x=>v>=x.min&&v<x.max);
-  el('band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  if(income){
+    el('band').textContent='該当なし';
+    el('monthly').textContent='¥0';
+  }else{
+    const arr = ent==='corp'?bandsCorp:bandsSole;
+    const band=arr.find(x=>v>=x.min&&v<x.max);
+    el('band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  }
 
   if(services.length && services[0].cat==='月次顧問') services[0].price=fee;
   renderQuote();
@@ -598,6 +654,7 @@ function recalc(){
 }
 
 function setTab(which){
+  if(ent==='income') which='s';
   el('tab-v').classList.toggle('active', which==='v');
   el('tab-s').classList.toggle('active', which==='s');
   el('panel-v').style.display = which==='v' ? 'block':'none';
@@ -606,8 +663,10 @@ function setTab(which){
 
 function renderServices(){
   const host=el('services'); host.innerHTML='';
-  const orderCorp=["月次顧問","ソフトウェアレンタル","決算・申告（法人）","年末調整","償却資産税申告"]; const orderSole=["月次顧問","ソフトウェアレンタル","個人確定申告","年末調整","償却資産税申告"];
-  const order=ent==='corp'?orderCorp:orderSole;
+  const orderCorp=["月次顧問","ソフトウェアレンタル","決算・申告（法人）","年末調整","償却資産税申告"];
+  const orderSole=["月次顧問","ソフトウェアレンタル","個人確定申告","年末調整","償却資産税申告"];
+  const orderIncome=["所得税確定申告"];
+  const order=ent==='corp'?orderCorp:(ent==='sole'?orderSole:orderIncome);
   const cats=[...new Set(services.map(x=>x.cat))].sort((a,b)=>order.indexOf(a)-order.indexOf(b));
 
   cats.forEach(c=>{
@@ -744,6 +803,8 @@ function buildQuoteRows(){
     if(it.kind==='mult_m'){
       const u=(services[0].price||0)*it.months;
       yearSub=u*q;
+    }else if(it.kind==='spot'){
+      yearSub=(it.price||0)*q;
     }else if(it.kind==='per_qty'){
       yearSub=(it.price||0)*q;
     }else if(it.kind==='asset_tax'){
@@ -829,15 +890,19 @@ function updatePrintMirror(){
 
 /* 付加価値 別紙 */
 function renderVaddSheet(){
-  el('vadd-ent').textContent = ent==='corp'?'法人':'個人';
+  el('vadd-ent').textContent = ent==='corp'?'法人':(ent==='sole'?'個人':'所得税確定申告');
   el('vadd-formula').textContent = ent==='corp'
     ? '経常利益＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費'
-    : '青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000';
+    : (ent==='sole'
+      ? '青色控除前利益＋青色専従者給与＋人件費＋支払利息＋賃借料＋リース料＋租税公課＋減価償却費＋3,000,000'
+      : '（所得税確定申告は本票の対象外）');
 
   const tb=el('vadd-tbody'); tb.innerHTML='';
   const rows = ent==='corp'
     ? [ ['経常利益','c_ordinary'],['人件費','c_labor'],['支払利息','c_int'],['賃借料','c_rent'],['リース料','c_lease'],['租税公課','c_tax'],['減価償却費','c_dep'] ]
-    : [ ['青色控除前利益','s_preprofit'],['青色専従者給与','s_family'],['人件費','s_labor'],['支払利息','s_int'],['賃借料','s_rent'],['リース料','s_lease'],['租税公課','s_tax'],['減価償却費','s_dep'],['加算','const_3m'] ];
+    : (ent==='sole'
+      ? [ ['青色控除前利益','s_preprofit'],['青色専従者給与','s_family'],['人件費','s_labor'],['支払利息','s_int'],['賃借料','s_rent'],['リース料','s_lease'],['租税公課','s_tax'],['減価償却費','s_dep'],['加算','const_3m'] ]
+      : []);
 
   rows.forEach(([label,id])=>{
     const tr=document.createElement('tr');
@@ -850,8 +915,8 @@ function renderVaddSheet(){
   const fee=bandFee(v)||0;
   el('vadd-sum').textContent=fmt(v);
   const arr=ent==='corp'?bandsCorp:bandsSole;
-  const band=arr.find(x=>v>=x.min&&v<x.max);
-  el('vadd-band').textContent = band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—';
+  const band=ent==='income' ? null : arr.find(x=>v>=x.min&&v<x.max);
+  el('vadd-band').textContent = ent==='income' ? '該当なし' : (band ? (band.max===Infinity?`${fmt(band.min)}円超`:`${fmt(band.min)}〜${fmt(band.max)}円`) : '—');
   el('vadd-monthly').textContent = yen(fee);
 }
 
@@ -1056,6 +1121,7 @@ function addPctLine(){
   // 区分
   el('ent-corp').addEventListener('click',()=>setEnt('corp'));
   el('ent-sole').addEventListener('click',()=>setEnt('sole'));
+  el('ent-income').addEventListener('click',()=>setEnt('income'));
 
   // タブ
   el('tab-v').addEventListener('click',()=>setTab('v'));
