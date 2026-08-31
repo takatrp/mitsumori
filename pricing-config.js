@@ -174,7 +174,7 @@
   };
 
   return deepFreeze({
-    appVersion: 'r6.1',
+    appVersion: 'r6.2',
     taxRate: 0.10,
     priceMaster: priceMaster,
     priceTableVersion: priceMaster.priceTableVersion,

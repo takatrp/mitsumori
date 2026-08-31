@@ -78,8 +78,10 @@
     .phase-row { display:grid; grid-template-columns:80px 1fr 1fr; gap:.6rem; align-items:end; margin-top:.55rem; }
     #interaction-mode-panel + .card { margin-top:1rem; }
     .mode-description { margin:0; line-height:1.7; }
+    .mode-control { display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
     .prospect-only { display:none; }
     body.mode-prospect .prospect-only { display:block; }
+    body.mode-prospect .btn.prospect-only { display:inline-flex; }
     body.mode-prospect .internal-mode-only { display:none!important; }
     body.mode-prospect #service-section { border-color:#9fc7d1; box-shadow:0 8px 30px rgba(47,113,131,.12); }
     body.mode-prospect #service-section .card-hd { background:#f0f8fa; }
@@ -102,6 +104,22 @@
     body.mode-prospect .prospect-choice input[type="checkbox"],body.mode-prospect .prospect-choice-row input[type="checkbox"] { width:1.25rem; height:1.25rem; accent-color:var(--primary); }
     body.mode-prospect .software-row { grid-template-columns:minmax(220px,1.3fr) 80px minmax(150px,1fr); }
     .prospect-impact { display:block; margin-top:.25rem; color:var(--primary-dark); font-weight:800; }
+    .value-diagram { border:2px solid #9fc7d1; border-radius:16px; overflow:hidden; background:linear-gradient(180deg,#f2fafb 0,#fff 100%); }
+    .value-diagram-hd { padding:.8rem 1rem; background:#dff0f3; border-bottom:1px solid #b8d8df; }
+    .value-diagram-hd h3 { margin:0 0 .25rem; font-size:1rem; }
+    .value-formula { display:flex; align-items:stretch; gap:.35rem; flex-wrap:wrap; padding:1rem; }
+    .value-term { flex:1 1 130px; min-width:120px; border:1px solid #c9dde1; border-radius:10px; background:#fff; padding:.6rem; text-align:center; }
+    .value-term-name { display:block; color:var(--sub); font-size:.76rem; line-height:1.35; }
+    .value-term-amount { display:block; margin-top:.25rem; font-weight:900; }
+    .value-plus { display:flex; align-items:center; justify-content:center; color:var(--primary); font-size:1.15rem; font-weight:900; }
+    .value-flow { display:grid; grid-template-columns:minmax(155px,1fr) 34px minmax(155px,1fr) 34px minmax(180px,1.15fr) 34px minmax(180px,1.15fr); gap:.35rem; align-items:stretch; padding:0 1rem 1rem; }
+    .value-flow-step { border:1px solid #b9d3d9; border-radius:12px; background:#fff; padding:.8rem; text-align:center; display:flex; flex-direction:column; justify-content:center; min-height:112px; }
+    .value-flow-step.accent { background:var(--primary); border-color:var(--primary); color:#fff; }
+    .value-flow-label { font-size:.76rem; color:var(--sub); line-height:1.4; }
+    .value-flow-step.accent .value-flow-label { color:#dceff3; }
+    .value-flow-value { display:block; margin:.35rem 0; font-size:1.08rem; font-weight:900; overflow-wrap:anywhere; }
+    .value-flow-arrow { display:flex; align-items:center; justify-content:center; color:var(--primary); font-size:1.5rem; font-weight:900; }
+    .value-diagram-note { margin:0 1rem 1rem; padding:.65rem .8rem; border-radius:10px; background:#fff8ea; border:1px solid #e8c58d; color:#69430d; font-size:.84rem; line-height:1.6; }
     .print-area { margin-top:1rem; }
     .paper { background:#fff; color:#111; border:1px solid #aab4b7; max-width:1050px; margin:1rem auto; padding:18px; }
     .paper h1 { text-align:center; letter-spacing:.18em; font-size:1.45rem; margin:.1rem 0 1rem; }
@@ -122,6 +140,8 @@
     footer { max-width:1260px; margin:1rem auto 5rem; padding:0 1rem; color:var(--sub); font-size:.8rem; }
     @media (max-width:900px) {
       .grid.two,.grid.three,.metric-grid,.prospect-summary-grid { grid-template-columns:1fr; }
+      .value-flow { grid-template-columns:1fr; }
+      .value-flow-arrow { min-height:26px; transform:rotate(90deg); }
       .adjust-row,.service-row,.software-row { grid-template-columns:1fr 1fr; }
       .quote-head { display:block; }
       .issuer { margin-top:1rem; min-width:0; }
@@ -132,6 +152,8 @@
       .topbar .actions { justify-content:flex-end; }
       .segmented { width:100%; }
       .segmented button { flex:1; padding:.48rem .25rem; font-size:.82rem; }
+      .value-formula { display:grid; grid-template-columns:1fr; }
+      .value-plus { min-height:22px; }
       .adjust-row,.service-row,.software-row,.phase-row { grid-template-columns:1fr; }
       .card-bd { padding:.8rem; }
       .sticky-actions .mini { display:none; }
@@ -169,14 +191,13 @@
   <main>
     <section class="card screen-only" id="interaction-mode-panel">
       <div class="card-hd">
-        <h2>入力モード</h2>
-        <div class="segmented" aria-label="入力モード">
-          <button type="button" data-interaction-mode="prospect">見込客と確認</button>
-          <button type="button" data-interaction-mode="internal">所内詳細</button>
+        <h2>表示</h2>
+        <div class="mode-control">
+          <button type="button" class="btn" id="internal-mode-toggle" aria-pressed="false">所内詳細</button>
         </div>
       </div>
       <div class="card-bd">
-        <p class="mode-description" id="mode-description">所内で標準報酬、原価、利益率まで確認するモードです。</p>
+        <p class="mode-description" id="mode-description">見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。</p>
       </div>
     </section>
 
@@ -202,21 +223,39 @@
     </section>
 
     <div class="section-stack screen-only" style="margin-top:1rem">
-      <section class="card internal-mode-only" id="value-section">
-        <div class="card-hd"><h2>1. 松本会計報酬算定上の付加価値額</h2><span class="pill">料金帯判定は12か月換算値</span></div>
+      <section class="card" id="value-section">
+        <div class="card-hd"><h2 id="value-section-title">付加価値算定プロセス</h2><span class="pill" id="value-section-pill">計算過程をその場で確認</span></div>
         <div class="card-bd section-stack">
-          <div class="help">本指標は、税理士法人松本会計が標準報酬を検討するための内部算定指標です。統計法令その他で定められた唯一の付加価値額ではありません。</div>
+          <div class="help prospect-only">松本会計独自の報酬算定用参考指標です。利益だけでなく、人件費や設備利用等も含めて事業の経済規模を確認します。法令上の唯一の付加価値額ではなく、業務内容、税務上の難易度及び提供する支援内容と合わせて標準報酬を検討します。</div>
+          <div class="help internal-mode-only">本指標は、税理士法人松本会計が標準報酬を検討するための内部算定指標です。統計法令その他で定められた唯一の付加価値額ではありません。</div>
           <div class="grid two">
             <label class="field"><span class="field-name">対象事業年度の月数</span><input id="period-months" type="number" min="1" max="12" value="12"></label>
             <label class="field" id="owner-labor-field"><span class="field-name">事業主本人の労働対価相当額</span><input id="owner-labor" type="text" inputmode="numeric" data-money><span class="mini">個人事業者について、法人の役員報酬に相当する事業主本人の労働対価を報酬算定上加算します。</span></label>
           </div>
           <div id="value-fields" class="grid two"></div>
-          <details>
+          <section class="value-diagram" aria-labelledby="value-diagram-title" aria-live="polite">
+            <div class="value-diagram-hd">
+              <h3 id="value-diagram-title">付加価値計算の流れ</h3>
+              <div class="mini">入力した項目が、どのように合計・換算・料金帯判定へつながるかを図で確認できます。</div>
+            </div>
+            <div class="value-formula" id="value-diagram-terms"></div>
+            <div class="value-flow">
+              <div class="value-flow-step"><span class="value-flow-label">各項目を合計</span><strong class="value-flow-value" id="value-diagram-period">未入力</strong><span class="mini">入力期間の付加価値額</span></div>
+              <div class="value-flow-arrow" aria-hidden="true">→</div>
+              <div class="value-flow-step"><span class="value-flow-label" id="value-diagram-conversion">× 12 ÷ 12か月</span><strong class="value-flow-value" id="value-diagram-annualized">未入力</strong><span class="mini">12か月換算後</span></div>
+              <div class="value-flow-arrow" aria-hidden="true">→</div>
+              <div class="value-flow-step accent"><span class="value-flow-label">標準報酬の参考帯</span><strong class="value-flow-value" id="value-diagram-band">判定前</strong><span id="value-diagram-fee">月額基準：判定前</span><button type="button" class="btn prospect-only" id="adopt-diagram-standard" style="margin-top:.65rem" disabled>この月額基準を見積りに反映</button></div>
+              <div class="value-flow-arrow" aria-hidden="true">→</div>
+              <div class="value-flow-step"><span class="value-flow-label">次の確認</span><strong class="value-flow-value">受託業務を選択</strong><span class="mini">業務内容・税務難易度・支援内容と総合</span></div>
+            </div>
+            <p class="value-diagram-note">この付加価値額だけで報酬を自動決定するものではありません。算定された参考帯と、実際に受託する業務を一緒に確認して最終額を決定します。</p>
+          </section>
+          <details class="internal-mode-only">
             <summary>入力項目の定義と注意事項</summary>
             <div class="details-body mini" id="value-help"></div>
           </details>
           <div id="value-alerts" class="section-stack"></div>
-          <div class="metric-grid">
+          <div class="metric-grid internal-mode-only">
             <div class="metric"><span>入力期間の付加価値額</span><strong id="period-value">—</strong></div>
             <div class="metric"><span>12か月換算後の付加価値額</span><strong id="annualized-value">—</strong></div>
             <div class="metric"><span>現在判定された帯</span><strong id="band-label">—</strong></div>
@@ -224,8 +263,8 @@
             <div class="metric"><span>境界額との差</span><strong id="boundary-distance">—</strong></div>
             <div class="metric"><span>隣接する帯・標準月額</span><strong id="adjacent-band">—</strong></div>
           </div>
-          <details>
-            <summary>現行の所内標準価格表を確認</summary>
+          <details class="internal-mode-only">
+            <summary id="band-table-summary">標準報酬の区分を確認</summary>
             <div class="details-body table-wrap"><table><thead><tr><th>付加価値帯</th><th class="money">標準月額</th></tr></thead><tbody id="band-table"></tbody></table></div>
           </details>
         </div>

@@ -442,8 +442,8 @@ test('現行価格、倍率、ソフトウェア請求額を変更していな�
   assert.deepEqual(config.services.software.slice(0, 3).map((item) => item.monthlyDirectCost), [null, null, null]);
 });
 
-test('見込客確認モード追加後も価格表版はr6.0を維持する', () => {
-  assert.equal(config.appVersion, 'r6.1');
+test('付加価値図解追加後も価格表版はr6.0を維持する', () => {
+  assert.equal(config.appVersion, 'r6.2');
   assert.equal(config.priceMaster.priceTableVersion, 'r6.0');
 });
 
@@ -482,20 +482,32 @@ try {
     readFile(join(repositoryRoot, 'index.html'), 'utf8'),
     readFile(join(repositoryRoot, 'app.js'), 'utf8')
   ]);
-  assert.match(htmlSource, /data-interaction-mode="prospect"/);
+  assert.doesNotMatch(htmlSource, />見込客と確認</);
+  assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
+  assert.match(htmlSource, /id="internal-mode-toggle"/);
   assert.match(htmlSource, /id="prospect-summary"/);
+  assert.match(htmlSource, /<section class="card" id="value-section">/);
+  assert.match(htmlSource, /id="value-diagram-terms"/);
+  assert.match(htmlSource, /id="value-diagram-annualized"/);
+  assert.match(htmlSource, /id="adopt-diagram-standard"/);
+  assert.match(htmlSource, /class="metric-grid internal-mode-only"/);
+  assert.match(htmlSource, /<details class="internal-mode-only">/);
   assert.match(htmlSource, /class="card internal-mode-only" id="cost-section"/);
   assert.match(htmlSource, /class="card internal-mode-only" id="validation-section"/);
   assert.match(htmlSource, /class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価/);
   assert.match(appSource, /function setInteractionMode\(/);
+  assert.match(appSource, /interactionMode: 'prospect'/);
+  assert.match(appSource, /merged\.interactionMode = 'prospect'/);
+  assert.match(appSource, /function renderValueDiagram\(/);
+  assert.match(appSource, /function adoptStandardFee\(/);
   assert.match(appSource, /function renderProspectSummary\(/);
   assert.match(appSource, /config\.multipliers\.corporateClosing/);
   assert.match(appSource, /config\.multipliers\.consumptionTaxReturn/);
-  console.log('✓ 見込客確認モードと社内情報の表示分離を実装している');
+  console.log('✓ 見込客向け既定表示、付加価値図解及び社内情報の表示分離を実装している');
   passed += 1;
 } catch (error) {
-  failures.push({ name: '見込客確認モードのソース検査', error });
-  console.error('✗ 見込客確認モードのソース検査');
+  failures.push({ name: '見込客向け既定表示と付加価値図解のソース検査', error });
+  console.error('✗ 見込客向け既定表示と付加価値図解のソース検査');
   console.error(error.stack || error.message || error);
 }
 

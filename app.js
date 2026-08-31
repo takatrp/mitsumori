@@ -10,8 +10,8 @@
   const entityLabels = { corp: '法人', sole: '個人', income: '所得税確定申告' };
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
   const interactionModeDescriptions = {
-    internal: '所内で標準報酬、原価、利益率まで確認するモードです。',
-    prospect: '見込客と一緒に受託業務を選び、加算理由と年間合計をその場で確認するモードです。社内情報は表示しません。'
+    internal: '所内で標準報酬、原価、利益率まで確認しています。「見込客画面に戻る」を押すと対面用の画面へ戻ります。',
+    prospect: '見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。'
   };
   const officePresets = {
     kobe: { branch: '【神戸事務所】', address: '〒651-0086 神戸市中央区磯上通8-1-1-7F', tel: 'TEL 078-242-2177', representative: '代表社員 松本考史' },
@@ -49,6 +49,11 @@
   function yen(value, fallback) {
     if (!Number.isFinite(value)) return fallback || '未確定';
     return '¥' + Math.round(value).toLocaleString('ja-JP');
+  }
+
+  function diagramYen(value, fallback) {
+    if (!Number.isFinite(value)) return fallback || '未入力';
+    return value < 0 ? '−' + yen(Math.abs(value)) : yen(value);
   }
 
   function percent(value, fallback) {
@@ -95,7 +100,7 @@
   function baseState() {
     return {
       entity: localStorage.getItem(config.storageKeys.legacyEntity) || 'corp',
-      interactionMode: 'internal',
+      interactionMode: 'prospect',
       document: { clientName: '', quoteDate: localToday(), quoteNumber: '', startDate: '', office: 'kobe', outputType: 'customer-only', scope: '', notes: '' },
       fiscalMonths: 12,
       ownerLaborCompensation: config.ownerLaborCompensation,
@@ -153,7 +158,8 @@
     merged.decision = Object.assign({}, defaults.decision, stored.decision || {});
     merged.comparison = Object.assign({}, defaults.comparison, stored.comparison || {});
     if (!['corp', 'sole', 'income'].includes(merged.entity)) merged.entity = 'corp';
-    if (!['internal', 'prospect'].includes(merged.interactionMode)) merged.interactionMode = 'internal';
+    // 画面を開いた時は必ず見込客向け表示から開始し、所内詳細はその都度明示操作で開く。
+    merged.interactionMode = 'prospect';
     const storedServices = stored.services || {};
     if (!Object.prototype.hasOwnProperty.call(storedServices, 'otherSpotSelected')) {
       merged.services.otherSpotSelected = Number.isFinite(Number(storedServices.otherSpotFee)) && Number(storedServices.otherSpotFee) !== 0;
@@ -212,12 +218,15 @@
     state.interactionMode = mode;
     document.body.classList.remove('mode-internal', 'mode-prospect');
     document.body.classList.add('mode-' + mode);
-    qsa('[data-interaction-mode]').forEach((button) => {
-      const active = button.dataset.interactionMode === mode;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-pressed', String(active));
-    });
+    const internalModeButton = $('internal-mode-toggle');
+    const internal = mode === 'internal';
+    internalModeButton.classList.toggle('primary', internal);
+    internalModeButton.setAttribute('aria-pressed', String(internal));
+    internalModeButton.textContent = internal ? '見込客画面に戻る' : '所内詳細';
     $('mode-description').textContent = interactionModeDescriptions[mode];
+    $('value-section-title').textContent = internal ? '1. 松本会計報酬算定上の付加価値額' : '付加価値算定プロセス';
+    $('value-section-pill').textContent = internal ? '料金帯判定は12か月換算値' : '計算過程をその場で確認';
+    $('band-table-summary').textContent = internal ? '現行の所内標準価格表を確認' : '標準報酬の区分を確認';
     $('service-section-title').textContent = mode === 'prospect' ? 'お見積り内容の確認' : '3. 受託業務・サービス';
     $('service-section-pill').textContent = mode === 'prospect' ? '選択内容を即時反映' : '既存価格を維持';
     $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + (mode === 'internal' ? '（実際の所内業務範囲は設定で編集）' : '');
@@ -337,6 +346,30 @@
   function renderBandTable() {
     if (state.entity === 'income') return;
     $('band-table').innerHTML = config.pricingBands[state.entity].map((band) => '<tr><td>' + escapeHtml(core.formatBandLabel(band)) + '</td><td class="money">' + (band.fee === null ? '別途お見積り' : yen(band.fee)) + '</td></tr>').join('');
+  }
+
+  function renderValueDiagram() {
+    if (state.entity === 'income') return;
+    const terms = config.valueAddedFields[state.entity].map((field) => ({
+      label: field.label,
+      value: state.valueValues[state.entity][field.key]
+    }));
+    if (state.entity === 'sole') {
+      terms.push({ label: '事業主本人の労働対価相当額', value: state.ownerLaborCompensation });
+    }
+    $('value-diagram-terms').innerHTML = terms.map((term, index) => '<div class="value-term"><span class="value-term-name">' + escapeHtml(term.label) + '</span><strong class="value-term-amount">' + escapeHtml(diagramYen(term.value)) + '</strong></div>' + (index < terms.length - 1 ? '<span class="value-plus" aria-hidden="true">＋</span>' : '')).join('');
+
+    const valueReady = model.valueResult && model.valueResult.status === 'calculated';
+    const annualizedReady = model.annualized && model.annualized.status === 'calculated';
+    const bandReady = model.bandResult && model.bandResult.status === 'calculated';
+    $('value-diagram-period').textContent = valueReady ? diagramYen(model.valueResult.value) : '未確定';
+    $('value-diagram-conversion').textContent = '× 12 ÷ ' + state.fiscalMonths + 'か月';
+    $('value-diagram-annualized').textContent = annualizedReady ? diagramYen(model.annualized.annualizedValue) : '未確定';
+    $('value-diagram-band').textContent = model.bandResult && model.bandResult.label ? model.bandResult.label : '判定前';
+    $('value-diagram-fee').textContent = bandReady ? '月額基準：' + yen(model.bandResult.fee) : (model.bandResult && model.bandResult.status === 'manual_required' ? '月額基準：個別見積り' : '月額基準：判定前');
+    const standardApplied = bandReady && state.decision.finalFeeConfirmed && state.decision.confirmationSource === 'standard' && state.decision.finalMonthlyFee === model.bandResult.fee;
+    $('adopt-diagram-standard').disabled = !bandReady || standardApplied;
+    $('adopt-diagram-standard').textContent = standardApplied ? '月額基準を反映済み' : 'この月額基準を見積りに反映';
   }
 
   function renderAdjustments() {
@@ -628,6 +661,7 @@
     const customSoftware = state.services.customSoftware;
     $('custom-software-gross').textContent = '月額粗利益：' + (Number.isFinite(customSoftware.monthlyBillingPrice) && Number.isFinite(customSoftware.monthlyDirectCost) ? yen(customSoftware.monthlyBillingPrice - customSoftware.monthlyDirectCost) : '未確定');
     if (state.entity !== 'income') {
+      renderValueDiagram();
       const valueOk = model.valueResult.status === 'calculated';
       const annualOk = model.annualized.status === 'calculated';
       $('period-value').textContent = valueOk ? yen(model.valueResult.value) : '未入力';
@@ -698,6 +732,16 @@
     state.comparison.phases = result.status === 'calculated' ? result.phases : [];
   }
 
+  function adoptStandardFee() {
+    if (!model.bandResult || !Number.isFinite(model.bandResult.fee)) return window.alert('標準額を自動算定できません。最終月次顧問料を手入力してください。');
+    state.decision.finalMonthlyFee = model.bandResult.fee;
+    state.decision.finalFeeConfirmed = true;
+    state.decision.confirmationSource = 'standard';
+    $('final-monthly-fee').value = formatNumber(state.decision.finalMonthlyFee);
+    rebuildPhases();
+    recalculate();
+  }
+
   function renderPhasePlan() {
     const host = $('phase-plan');
     if (!state.comparison.phases.length) rebuildPhases();
@@ -751,7 +795,7 @@
     }
 
     const fee = state.decision.finalMonthlyFee;
-    const feeReady = Number.isFinite(fee) && fee > 0;
+    const feeReady = Number.isFinite(fee) && fee > 0 && state.decision.finalFeeConfirmed;
     const breakdown = model.estimate && model.estimate.breakdown ? model.estimate.breakdown : {};
     lines.push({ name: '月次顧問料', detail: '月額 × 12か月', annual: feeReady ? fee * 12 : null, pending: !feeReady, optional: false });
 
@@ -787,7 +831,7 @@
 
   function renderProspectSummary() {
     const fee = state.decision.finalMonthlyFee;
-    const feeReady = Number.isFinite(fee) && fee > 0;
+    const feeReady = Number.isFinite(fee) && fee > 0 && state.decision.finalFeeConfirmed;
     $('corp-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.corporateClosing) + ' を加算（月額×' + config.multipliers.corporateClosing + '）' : '月次顧問料の確定後に年間加算額を表示';
     $('sole-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.soleProprietorClosingAndReturn) + ' を加算（月額×' + config.multipliers.soleProprietorClosingAndReturn + '）' : '月次顧問料の確定後に年間加算額を表示';
     const consumptionStatus = currentConsumptionTaxStatus();
@@ -808,7 +852,7 @@
     $('prospect-total').textContent = estimateReady ? yen(model.estimate.total) : '未確定';
     $('prospect-total-note').textContent = estimateReady
       ? 'チェック内容を反映した年間合計です。'
-      : (taxPending ? '消費税申告の有無を確認すると年間合計を表示します。' : '金額未確定の項目があります。所内詳細で月次顧問料・単価を確定してください。');
+      : (taxPending ? '消費税申告の有無を確認すると年間合計を表示します。' : '金額未確定の項目があります。図解の月額基準を見積りへ反映するか、所内詳細で月次顧問料・単価を確認してください。');
   }
 
   function renderPrintDocuments() {
@@ -968,7 +1012,7 @@
 
   function bindStaticInputs() {
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
-    qsa('[data-interaction-mode]').forEach((button) => button.addEventListener('click', () => setInteractionMode(button.dataset.interactionMode)));
+    $('internal-mode-toggle').addEventListener('click', () => setInteractionMode(state.interactionMode === 'internal' ? 'prospect' : 'internal'));
     setDocumentFields();
     $('period-months').value = state.fiscalMonths;
     $('period-months').addEventListener('input', () => { state.fiscalMonths = Number($('period-months').value); state.decision.finalFeeConfirmed = false; recalculate(); });
@@ -1029,15 +1073,8 @@
     $('revision-date').addEventListener('input', () => { state.comparison.revisionDate = $('revision-date').value; rebuildPhases(); recalculate(); });
     $('revision-stages').value = String(state.comparison.steps);
     $('revision-stages').addEventListener('change', () => { state.comparison.steps = Number($('revision-stages').value); rebuildPhases(); recalculate(); });
-    $('adopt-standard').addEventListener('click', () => {
-      if (!model.bandResult || !Number.isFinite(model.bandResult.fee)) return window.alert('標準額を自動算定できません。最終月次顧問料を手入力してください。');
-      state.decision.finalMonthlyFee = model.bandResult.fee;
-      state.decision.finalFeeConfirmed = true;
-      state.decision.confirmationSource = 'standard';
-      $('final-monthly-fee').value = formatNumber(state.decision.finalMonthlyFee);
-      rebuildPhases();
-      recalculate();
-    });
+    $('adopt-standard').addEventListener('click', adoptStandardFee);
+    $('adopt-diagram-standard').addEventListener('click', adoptStandardFee);
     $('adopt-recommended').addEventListener('click', () => {
       if (!model.recommendation || !Number.isFinite(model.recommendation.recommendedMonthlyFee)) return window.alert('原価下限等が未確定のため、推奨額を採用できません。');
       state.decision.finalMonthlyFee = model.recommendation.recommendedMonthlyFee;
