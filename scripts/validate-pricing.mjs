@@ -442,6 +442,11 @@ test('現行価格、倍率、ソフトウェア請求額を変更していな�
   assert.deepEqual(config.services.software.slice(0, 3).map((item) => item.monthlyDirectCost), [null, null, null]);
 });
 
+test('見込客確認モード追加後も価格表版はr6.0を維持する', () => {
+  assert.equal(config.appVersion, 'r6.1');
+  assert.equal(config.priceMaster.priceTableVersion, 'r6.0');
+});
+
 test('localStorage.clear()を使用していない', () => {
   // 非同期検証は末尾の専用処理で行うため、ここでは設定キーの安全性を確認する。
   assert.equal(config.storageKeys.all.length > 0, true);
@@ -469,6 +474,28 @@ try {
 } catch (error) {
   failures.push({ name: 'ソース全体のlocalStorage.clear()検査', error });
   console.error('✗ ソース全体のlocalStorage.clear()検査');
+  console.error(error.stack || error.message || error);
+}
+
+try {
+  const [htmlSource, appSource] = await Promise.all([
+    readFile(join(repositoryRoot, 'index.html'), 'utf8'),
+    readFile(join(repositoryRoot, 'app.js'), 'utf8')
+  ]);
+  assert.match(htmlSource, /data-interaction-mode="prospect"/);
+  assert.match(htmlSource, /id="prospect-summary"/);
+  assert.match(htmlSource, /class="card internal-mode-only" id="cost-section"/);
+  assert.match(htmlSource, /class="card internal-mode-only" id="validation-section"/);
+  assert.match(htmlSource, /class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価/);
+  assert.match(appSource, /function setInteractionMode\(/);
+  assert.match(appSource, /function renderProspectSummary\(/);
+  assert.match(appSource, /config\.multipliers\.corporateClosing/);
+  assert.match(appSource, /config\.multipliers\.consumptionTaxReturn/);
+  console.log('✓ 見込客確認モードと社内情報の表示分離を実装している');
+  passed += 1;
+} catch (error) {
+  failures.push({ name: '見込客確認モードのソース検査', error });
+  console.error('✗ 見込客確認モードのソース検査');
   console.error(error.stack || error.message || error);
 }
 

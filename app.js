@@ -9,6 +9,10 @@
   const qsa = (selector, root) => Array.from((root || document).querySelectorAll(selector));
   const entityLabels = { corp: '法人', sole: '個人', income: '所得税確定申告' };
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
+  const interactionModeDescriptions = {
+    internal: '所内で標準報酬、原価、利益率まで確認するモードです。',
+    prospect: '見込客と一緒に受託業務を選び、加算理由と年間合計をその場で確認するモードです。社内情報は表示しません。'
+  };
   const officePresets = {
     kobe: { branch: '【神戸事務所】', address: '〒651-0086 神戸市中央区磯上通8-1-1-7F', tel: 'TEL 078-242-2177', representative: '代表社員 松本考史' },
     sakaiminato: { branch: '【境港事務所】', address: '〒684-0071 鳥取県境港市外江町3801', tel: 'TEL 0859-44-6195', representative: '代表社員 松本正福' }
@@ -91,6 +95,7 @@
   function baseState() {
     return {
       entity: localStorage.getItem(config.storageKeys.legacyEntity) || 'corp',
+      interactionMode: 'internal',
       document: { clientName: '', quoteDate: localToday(), quoteNumber: '', startDate: '', office: 'kobe', outputType: 'customer-only', scope: '', notes: '' },
       fiscalMonths: 12,
       ownerLaborCompensation: config.ownerLaborCompensation,
@@ -108,6 +113,7 @@
         assetTaxCount: 1,
         otherSpotName: '',
         otherSpotFee: 0,
+        otherSpotSelected: false,
         annualAdjustment: 0,
         software: initialSoftware(),
         customSoftware: { id: 'custom', name: '', selected: false, quantity: 1, monthlyBillingPrice: null, monthlyDirectCost: null },
@@ -147,6 +153,13 @@
     merged.decision = Object.assign({}, defaults.decision, stored.decision || {});
     merged.comparison = Object.assign({}, defaults.comparison, stored.comparison || {});
     if (!['corp', 'sole', 'income'].includes(merged.entity)) merged.entity = 'corp';
+    if (!['internal', 'prospect'].includes(merged.interactionMode)) merged.interactionMode = 'internal';
+    const storedServices = stored.services || {};
+    if (!Object.prototype.hasOwnProperty.call(storedServices, 'otherSpotSelected')) {
+      merged.services.otherSpotSelected = Number.isFinite(Number(storedServices.otherSpotFee)) && Number(storedServices.otherSpotFee) !== 0;
+    } else {
+      merged.services.otherSpotSelected = storedServices.otherSpotSelected === true;
+    }
     return merged;
   }
 
@@ -192,6 +205,66 @@
   function setCurrentConsumptionTaxStatus(value) {
     if (!state.services.consumptionTaxStatusByEntity) state.services.consumptionTaxStatusByEntity = { corp: 'unconfirmed', sole: 'unconfirmed' };
     if (state.entity === 'corp' || state.entity === 'sole') state.services.consumptionTaxStatusByEntity[state.entity] = value;
+  }
+
+  function setInteractionMode(mode, shouldRecalculate) {
+    if (!['internal', 'prospect'].includes(mode)) return;
+    state.interactionMode = mode;
+    document.body.classList.remove('mode-internal', 'mode-prospect');
+    document.body.classList.add('mode-' + mode);
+    qsa('[data-interaction-mode]').forEach((button) => {
+      const active = button.dataset.interactionMode === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    $('mode-description').textContent = interactionModeDescriptions[mode];
+    $('service-section-title').textContent = mode === 'prospect' ? 'お見積り内容の確認' : '3. 受託業務・サービス';
+    $('service-section-pill').textContent = mode === 'prospect' ? '選択内容を即時反映' : '既存価格を維持';
+    $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + (mode === 'internal' ? '（実際の所内業務範囲は設定で編集）' : '');
+    if (mode === 'prospect' && state.document.outputType !== 'customer-only') {
+      state.document.outputType = 'customer-only';
+      $('output-type').value = 'customer-only';
+    }
+    applyOutputMode(state.document.outputType);
+    if (shouldRecalculate !== false) recalculate(); else saveState();
+  }
+
+  function syncServiceSelectionControls() {
+    $('corp-closing').checked = state.services.corporateClosingSelected;
+    $('corp-closing-waiver').checked = state.services.corporateReturnNotEngagedConfirmed;
+    $('sole-closing').checked = state.services.soleClosingSelected;
+    $('sole-closing-waiver').checked = state.services.soleReturnNotEngagedConfirmed;
+    $('consumption-tax-status').value = currentConsumptionTaxStatus();
+    $('year-end-base').checked = state.services.yearEndSelected;
+    $('asset-tax').checked = state.services.assetTaxSelected;
+    $('custom-software-selected').checked = state.services.customSoftware.selected;
+    $('other-spot-selected').checked = state.services.otherSpotSelected;
+    $('corp-closing-waiver-row').classList.toggle('hidden', state.entity !== 'corp' || state.services.corporateClosingSelected);
+    $('sole-closing-waiver-row').classList.toggle('hidden', state.entity !== 'sole' || state.services.soleClosingSelected);
+    renderSoftware();
+    renderIncomeServices();
+  }
+
+  function clearServiceSelections() {
+    if (state.entity === 'income') {
+      Object.values(state.services.income).forEach((item) => { item.selected = false; });
+    } else {
+      if (state.entity === 'corp') {
+        state.services.corporateClosingSelected = false;
+        state.services.corporateReturnNotEngagedConfirmed = false;
+      } else {
+        state.services.soleClosingSelected = false;
+        state.services.soleReturnNotEngagedConfirmed = false;
+      }
+      setCurrentConsumptionTaxStatus('unconfirmed');
+      state.services.yearEndSelected = false;
+      state.services.assetTaxSelected = false;
+      state.services.otherSpotSelected = false;
+      Object.values(state.services.software).forEach((item) => { item.selected = false; });
+      state.services.customSoftware.selected = false;
+    }
+    syncServiceSelectionControls();
+    recalculate();
   }
 
   function bindMoneyInput(input, getter, setter, options) {
@@ -301,8 +374,9 @@
     config.services.software.filter((item) => item.id !== 'custom').forEach((definition) => {
       const item = state.services.software[definition.id];
       const row = document.createElement('div');
-      row.className = 'service-row software-row';
-      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><span class="field-name">顧客請求額</span><input type="text" inputmode="numeric" data-money></label><label class="field"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money placeholder="未設定"></label><span class="pill" data-gross-profit>粗利益：未確定</span>';
+      row.className = 'service-row software-row prospect-choice-row';
+      row.dataset.softwareId = definition.id;
+      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><span class="field-name">顧客請求額</span><input type="text" inputmode="numeric" data-money></label><label class="field internal-mode-only"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money placeholder="未設定"></label><span class="pill internal-mode-only" data-gross-profit>粗利益：未確定</span>';
       const checkbox = row.querySelector('input[type="checkbox"]');
       const inputs = row.querySelectorAll('input[data-money]');
       const grossProfit = row.querySelector('[data-gross-profit]');
@@ -325,8 +399,9 @@
     config.services.incomeTaxReturn.forEach((definition) => {
       const item = state.services.income[definition.id];
       const row = document.createElement('div');
-      row.className = 'service-row';
-      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b><br><span class="mini">' + escapeHtml(definition.note || '') + (definition.minimumPrice ? '（最低価格）' : '') + '</span></span></label><label class="field"><span class="field-name">数量</span><input type="number" min="0" step="1"></label><label class="field"><span class="field-name">単価</span><input type="text" inputmode="numeric" data-money ' + (definition.editable ? '' : 'readonly') + '></label>' + (definition.priceConfirmationRequired ? '<label class="inline-check"><input type="checkbox" data-confirm><span>単価を確認</span></label>' : '<span class="mini">所内標準価格</span>');
+      row.className = 'service-row prospect-choice-row';
+      row.dataset.incomeServiceId = definition.id;
+      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b><br><span class="mini">' + escapeHtml(definition.note || '') + (definition.minimumPrice ? '（最低価格）' : '') + '</span></span></label><label class="field"><span class="field-name">数量</span><input type="number" min="0" step="1"></label><label class="field"><span class="field-name">単価</span><input type="text" inputmode="numeric" data-money ' + (definition.editable ? '' : 'readonly') + '></label>' + (definition.priceConfirmationRequired ? '<label class="inline-check"><input type="checkbox" data-confirm><span>単価を確認</span></label>' : '<span class="mini"><span class="internal-mode-only">所内標準価格</span><span class="prospect-only">表示単価</span></span>');
       const checkbox = row.querySelector('input[type="checkbox"]');
       const qtyInput = row.querySelector('input[type="number"]');
       const priceInput = row.querySelector('input[data-money]');
@@ -443,7 +518,7 @@
       yearEndAdjustmentFee: yearEndFee(),
       depreciableAssetsFee: assetTaxFee(),
       softwareItems: selectedSoftware(),
-      otherAnnualFee: numberOrZero(state.services.otherSpotFee),
+      otherAnnualFee: state.services.otherSpotSelected ? numberOrZero(state.services.otherSpotFee) : 0,
       annualAdjustmentAmount: numberOrZero(state.services.annualAdjustment),
       taxRate: config.taxRate
     });
@@ -540,6 +615,8 @@
       if (!Number.isFinite(software.monthlyBillingPrice) || software.monthlyBillingPrice < 0) add('software_billing_invalid', '選択したソフトウェアの顧客請求額を確認してください。');
       if (software.id === 'custom' && !String(software.name || '').trim()) add('custom_software_name_missing', '任意追加ソフトの名称を入力してください。');
     });
+    if (state.services.otherSpotSelected && !String(state.services.otherSpotName || '').trim()) add('other_spot_name_missing', '選択したその他年次・スポット業務の名称を入力してください。');
+    if (state.services.otherSpotSelected && (!Number.isFinite(state.services.otherSpotFee) || state.services.otherSpotFee <= 0)) add('other_spot_fee_invalid', '選択したその他年次・スポット業務の報酬額を入力してください。');
     return { allowed: errors.length === 0, errors };
   }
 
@@ -600,6 +677,7 @@
       $('decision-alerts').innerHTML = decisionAlerts.join('');
       renderComparison();
     }
+    renderProspectSummary();
     renderValidation();
     renderPrintDocuments();
   }
@@ -658,6 +736,79 @@
     if (b.otherAnnualFee) lines.push({ name: state.services.otherSpotName || 'その他年次・スポット報酬', unit: yen(b.otherAnnualFee), quantity: 1, annual: b.otherAnnualFee });
     if (b.annualAdjustmentAmount) lines.push({ name: '年間調整', unit: yen(b.annualAdjustmentAmount), quantity: 1, annual: b.annualAdjustmentAmount });
     return lines;
+  }
+
+  function prospectChecklistLines() {
+    const lines = [];
+    if (state.entity === 'income') {
+      config.services.incomeTaxReturn.forEach((definition) => {
+        const item = state.services.income[definition.id];
+        if (!item.selected) return;
+        const amountReady = Number.isFinite(item.price) && item.price >= 0;
+        lines.push({ name: item.name, detail: '単価 × ' + (item.quantity || 1) + '件', annual: amountReady ? item.price * (item.quantity || 1) : null, pending: !amountReady, optional: true });
+      });
+      return lines;
+    }
+
+    const fee = state.decision.finalMonthlyFee;
+    const feeReady = Number.isFinite(fee) && fee > 0;
+    const breakdown = model.estimate && model.estimate.breakdown ? model.estimate.breakdown : {};
+    lines.push({ name: '月次顧問料', detail: '月額 × 12か月', annual: feeReady ? fee * 12 : null, pending: !feeReady, optional: false });
+
+    if (state.entity === 'corp' && state.services.corporateClosingSelected) {
+      lines.push({ name: '法人決算・申告一式', detail: '月次顧問料 × ' + config.multipliers.corporateClosing + 'か月分', annual: feeReady ? breakdown.corporateClosingFee : null, pending: !feeReady, optional: true });
+    }
+    if (state.entity === 'sole' && state.services.soleClosingSelected) {
+      lines.push({ name: '所得税決算・確定申告一式', detail: '月次顧問料 × ' + config.multipliers.soleProprietorClosingAndReturn + 'か月分', annual: feeReady ? breakdown.soleClosingFee : null, pending: !feeReady, optional: true });
+    }
+    if (currentConsumptionTaxStatus() === 'required') {
+      lines.push({ name: '消費税申告書作成', detail: '月次顧問料 × ' + config.multipliers.consumptionTaxReturn + 'か月分', annual: feeReady ? breakdown.consumptionTaxReturnFee : null, pending: !feeReady, optional: true });
+    }
+    if (state.services.yearEndSelected) {
+      lines.push({ name: '年末調整・源泉徴収票等', detail: '基本料金＋発行人数 ' + state.services.yearEndCount + '人分', annual: breakdown.yearEndAdjustmentFee, pending: !Number.isFinite(breakdown.yearEndAdjustmentFee), optional: true });
+    }
+    if (state.services.assetTaxSelected) {
+      lines.push({ name: '償却資産税申告', detail: '対象市町村 ' + state.services.assetTaxCount + '件', annual: breakdown.depreciableAssetsFee, pending: !Number.isFinite(breakdown.depreciableAssetsFee), optional: true });
+    }
+    selectedSoftware().forEach((item) => {
+      const amountReady = Number.isFinite(item.monthlyBillingPrice) && item.monthlyBillingPrice >= 0;
+      const quantity = Math.max(0, Number(item.quantity) || 0);
+      lines.push({ name: item.name, detail: '月額 × ' + quantity + '契約 × 12か月', annual: amountReady ? item.monthlyBillingPrice * quantity * 12 : null, pending: !amountReady, optional: true });
+    });
+    if (state.services.otherSpotSelected) {
+      const amountReady = Number.isFinite(state.services.otherSpotFee) && state.services.otherSpotFee > 0;
+      lines.push({ name: state.services.otherSpotName || 'その他年次・スポット業務', detail: '年額', annual: amountReady ? state.services.otherSpotFee : null, pending: !amountReady, optional: true });
+    }
+    if (numberOrZero(state.services.annualAdjustment) !== 0) {
+      lines.push({ name: 'その他調整', detail: '事前設定済み', annual: numberOrZero(state.services.annualAdjustment), pending: false, optional: true });
+    }
+    return lines;
+  }
+
+  function renderProspectSummary() {
+    const fee = state.decision.finalMonthlyFee;
+    const feeReady = Number.isFinite(fee) && fee > 0;
+    $('corp-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.corporateClosing) + ' を加算（月額×' + config.multipliers.corporateClosing + '）' : '月次顧問料の確定後に年間加算額を表示';
+    $('sole-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.soleProprietorClosingAndReturn) + ' を加算（月額×' + config.multipliers.soleProprietorClosingAndReturn + '）' : '月次顧問料の確定後に年間加算額を表示';
+    const consumptionStatus = currentConsumptionTaxStatus();
+    $('consumption-tax-impact').textContent = consumptionStatus === 'required'
+      ? (feeReady ? '年間 ' + yen(fee * config.multipliers.consumptionTaxReturn) + ' を加算（月額×' + config.multipliers.consumptionTaxReturn + '）' : '月次顧問料の確定後に年間加算額を表示')
+      : (consumptionStatus === 'none' ? '申告報酬の加算はありません' : '申告の有無を確認してください');
+
+    const lines = prospectChecklistLines();
+    const selectedCount = lines.filter((line) => line.optional).length;
+    $('prospect-selection-status').textContent = '選択中 ' + selectedCount + '件';
+    $('prospect-summary-lines').innerHTML = lines.map((line) => '<div class="prospect-line"><div><div class="prospect-line-name">' + escapeHtml(line.name) + '</div><div class="mini">' + escapeHtml(line.detail) + '</div></div><div class="prospect-line-amount">' + (line.pending ? '金額未確定' : yen(line.annual)) + '</div></div>').join('') || '<div class="empty-state">見積項目はまだ選択されていません</div>';
+
+    const taxPending = state.entity !== 'income' && consumptionStatus === 'unconfirmed';
+    const hasPending = lines.some((line) => line.pending) || taxPending;
+    const estimateReady = model.estimate && model.estimate.status === 'calculated' && !hasPending;
+    $('prospect-subtotal').textContent = estimateReady ? yen(model.estimate.subtotal) : '未確定';
+    $('prospect-tax').textContent = estimateReady ? yen(model.estimate.consumptionTax) : '未確定';
+    $('prospect-total').textContent = estimateReady ? yen(model.estimate.total) : '未確定';
+    $('prospect-total-note').textContent = estimateReady
+      ? 'チェック内容を反映した年間合計です。'
+      : (taxPending ? '消費税申告の有無を確認すると年間合計を表示します。' : '金額未確定の項目があります。所内詳細で月次顧問料・単価を確定してください。');
   }
 
   function renderPrintDocuments() {
@@ -817,6 +968,7 @@
 
   function bindStaticInputs() {
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
+    qsa('[data-interaction-mode]').forEach((button) => button.addEventListener('click', () => setInteractionMode(button.dataset.interactionMode)));
     setDocumentFields();
     $('period-months').value = state.fiscalMonths;
     $('period-months').addEventListener('input', () => { state.fiscalMonths = Number($('period-months').value); state.decision.finalFeeConfirmed = false; recalculate(); });
@@ -857,6 +1009,8 @@
     $('custom-software-selected').addEventListener('change', () => { state.services.customSoftware.selected = $('custom-software-selected').checked; recalculate(); });
     bindText('other-spot-name', state.services, 'otherSpotName');
     bindMoneyInput($('other-spot-fee'), () => state.services.otherSpotFee, (value) => { state.services.otherSpotFee = value; }, { allowNull: false });
+    $('other-spot-selected').checked = state.services.otherSpotSelected;
+    $('other-spot-selected').addEventListener('change', () => { state.services.otherSpotSelected = $('other-spot-selected').checked; recalculate(); });
     bindMoneyInput($('annual-adjustment'), () => state.services.annualAdjustment, (value) => { state.services.annualAdjustment = value; }, { allowNull: false });
     $('target-margin').value = state.cost.targetProfitRate === null ? '' : state.cost.targetProfitRate;
     $('target-margin').addEventListener('input', () => { state.cost.targetProfitRate = parseNumber($('target-margin').value); recalculate(); });
@@ -896,6 +1050,7 @@
     $('preview-button').addEventListener('click', preview);
     $('customer-print-button').addEventListener('click', () => printDocument(false));
     $('internal-print-button').addEventListener('click', () => printDocument(true));
+    $('clear-service-selections').addEventListener('click', clearServiceSelections);
     $('reset-button').addEventListener('click', resetTool);
   }
 
@@ -911,6 +1066,7 @@
     bindStaticInputs();
     window.addEventListener('beforeprint', handleBeforePrint);
     window.addEventListener('afterprint', handleAfterPrint);
+    setInteractionMode(state.interactionMode, false);
     applyOutputMode(state.document.outputType);
     initializing = false;
     setEntity(state.entity);

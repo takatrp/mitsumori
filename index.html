@@ -76,6 +76,32 @@
     .service-row { display:grid; grid-template-columns:minmax(220px,1.3fr) 115px 135px 130px; gap:.55rem; align-items:center; padding:.5rem 0; border-bottom:1px solid #edf2f3; }
     .software-row { grid-template-columns:minmax(190px,1.2fr) 80px 125px 125px 125px; }
     .phase-row { display:grid; grid-template-columns:80px 1fr 1fr; gap:.6rem; align-items:end; margin-top:.55rem; }
+    #interaction-mode-panel + .card { margin-top:1rem; }
+    .mode-description { margin:0; line-height:1.7; }
+    .prospect-only { display:none; }
+    body.mode-prospect .prospect-only { display:block; }
+    body.mode-prospect .internal-mode-only { display:none!important; }
+    body.mode-prospect #service-section { border-color:#9fc7d1; box-shadow:0 8px 30px rgba(47,113,131,.12); }
+    body.mode-prospect #service-section .card-hd { background:#f0f8fa; }
+    .prospect-guide { border:1px solid #9fc7d1; background:linear-gradient(135deg,#edf8fa,#fff); border-radius:14px; padding:.85rem 1rem; }
+    .prospect-guide-row { display:flex; gap:1rem; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+    .prospect-summary { border:2px solid var(--primary); border-radius:14px; overflow:hidden; background:#fff; }
+    .prospect-summary-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.75rem .9rem; background:var(--primary); color:#fff; }
+    .prospect-summary-head h3 { margin:0; font-size:1rem; }
+    .prospect-summary-head .pill { color:var(--ink); }
+    .prospect-summary-grid { display:grid; grid-template-columns:minmax(0,1fr) 310px; gap:1rem; padding:.9rem; }
+    .prospect-line { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:.6rem 0; border-bottom:1px solid #e5edef; }
+    .prospect-line:last-child { border-bottom:0; }
+    .prospect-line-name { font-weight:800; }
+    .prospect-line-amount { font-weight:900; white-space:nowrap; text-align:right; }
+    .prospect-totals { border-radius:12px; background:#f3f8f9; padding:.75rem; align-self:start; }
+    .prospect-total-row { display:flex; justify-content:space-between; gap:.8rem; padding:.4rem 0; }
+    .prospect-total-row.grand { border-top:2px solid var(--primary); margin-top:.3rem; padding-top:.7rem; font-size:1.12rem; font-weight:900; }
+    body.mode-prospect .prospect-choice,body.mode-prospect .prospect-choice-row { border:1px solid #c4d8dd; border-radius:12px; padding:.75rem; background:#fff; }
+    body.mode-prospect .prospect-choice:has(input:checked),body.mode-prospect .prospect-choice-row:has(input:checked) { border-color:var(--primary); background:#eff8fa; box-shadow:inset 0 0 0 1px var(--primary); }
+    body.mode-prospect .prospect-choice input[type="checkbox"],body.mode-prospect .prospect-choice-row input[type="checkbox"] { width:1.25rem; height:1.25rem; accent-color:var(--primary); }
+    body.mode-prospect .software-row { grid-template-columns:minmax(220px,1.3fr) 80px minmax(150px,1fr); }
+    .prospect-impact { display:block; margin-top:.25rem; color:var(--primary-dark); font-weight:800; }
     .print-area { margin-top:1rem; }
     .paper { background:#fff; color:#111; border:1px solid #aab4b7; max-width:1050px; margin:1rem auto; padding:18px; }
     .paper h1 { text-align:center; letter-spacing:.18em; font-size:1.45rem; margin:.1rem 0 1rem; }
@@ -95,7 +121,7 @@
     .empty-state { color:var(--sub); padding:.7rem; text-align:center; }
     footer { max-width:1260px; margin:1rem auto 5rem; padding:0 1rem; color:var(--sub); font-size:.8rem; }
     @media (max-width:900px) {
-      .grid.two,.grid.three,.metric-grid { grid-template-columns:1fr; }
+      .grid.two,.grid.three,.metric-grid,.prospect-summary-grid { grid-template-columns:1fr; }
       .adjust-row,.service-row,.software-row { grid-template-columns:1fr 1fr; }
       .quote-head { display:block; }
       .issuer { margin-top:1rem; min-width:0; }
@@ -134,13 +160,26 @@
         <strong>松本会計・標準報酬算定ツール</strong>
         <span class="version" data-app-version>—</span>
       </div>
-      <div class="actions screen-only">
+      <div class="actions screen-only internal-mode-only">
         <span class="mini">価格表 <b id="price-version-header">—</b> ／ 適用開始日 <b id="effective-date-header">要設定</b></span>
       </div>
     </div>
   </header>
 
   <main>
+    <section class="card screen-only" id="interaction-mode-panel">
+      <div class="card-hd">
+        <h2>入力モード</h2>
+        <div class="segmented" aria-label="入力モード">
+          <button type="button" data-interaction-mode="prospect">見込客と確認</button>
+          <button type="button" data-interaction-mode="internal">所内詳細</button>
+        </div>
+      </div>
+      <div class="card-bd">
+        <p class="mode-description" id="mode-description">所内で標準報酬、原価、利益率まで確認するモードです。</p>
+      </div>
+    </section>
+
     <section class="card screen-only">
       <div class="card-hd">
         <h2>算定区分</h2>
@@ -157,13 +196,13 @@
           <label class="field"><span class="field-name">見積番号 <span class="required-mark">*</span></span><input id="quote-number" type="text" placeholder="例：20260816-01"></label>
           <label class="field"><span class="field-name">適用開始日 <span class="required-mark">*</span></span><input id="start-date" type="date"></label>
           <label class="field"><span class="field-name">発行拠点</span><select id="office"><option value="kobe">神戸事務所</option><option value="sakaiminato">境港事務所</option></select></label>
-          <label class="field"><span class="field-name">出力する資料</span><select id="output-type"><option value="customer-only">顧客向け見積書のみ</option><option value="customer-reference">顧客向け見積書＋算定根拠</option><option value="internal">社内用見積書＋算定根拠＋原価分析</option></select></label>
+          <label class="field internal-mode-only" id="output-type-field"><span class="field-name">出力する資料</span><select id="output-type"><option value="customer-only">顧客向け見積書のみ</option><option value="customer-reference">顧客向け見積書＋算定根拠</option><option value="internal">社内用見積書＋算定根拠＋原価分析</option></select></label>
         </div>
       </div>
     </section>
 
     <div class="section-stack screen-only" style="margin-top:1rem">
-      <section class="card" id="value-section">
+      <section class="card internal-mode-only" id="value-section">
         <div class="card-hd"><h2>1. 松本会計報酬算定上の付加価値額</h2><span class="pill">料金帯判定は12か月換算値</span></div>
         <div class="card-bd section-stack">
           <div class="help">本指標は、税理士法人松本会計が標準報酬を検討するための内部算定指標です。統計法令その他で定められた唯一の付加価値額ではありません。</div>
@@ -192,7 +231,7 @@
         </div>
       </section>
 
-      <section class="card" id="adjustment-section">
+      <section class="card internal-mode-only" id="adjustment-section">
         <div class="card-hd"><h2>2. 業務量・複雑性・支援内容の調整</h2><span class="pill">月額調整</span></div>
         <div class="card-bd section-stack">
           <p class="mini">該当項目を選び、所内判断による月額調整額と理由を入力してください。標準加算額は設定していません。</p>
@@ -202,15 +241,35 @@
       </section>
 
       <section class="card" id="service-section">
-        <div class="card-hd"><h2>3. 受託業務・サービス</h2><span class="pill">既存価格を維持</span></div>
+        <div class="card-hd"><h2 id="service-section-title">3. 受託業務・サービス</h2><span class="pill" id="service-section-pill">既存価格を維持</span></div>
         <div class="card-bd section-stack">
+          <div class="prospect-only prospect-guide" id="prospect-guide">
+            <div class="prospect-guide-row">
+              <div><b>月次顧問料に加え、ここで選んだ業務だけがお見積りに加算されます。</b><br><span class="mini">現在チェック済みの項目も下の明細にすべて表示します。金額は選択のたびに更新されます。</span></div>
+              <button type="button" class="btn" id="clear-service-selections">受託項目を未選択にして確認開始</button>
+            </div>
+          </div>
+
+          <div class="prospect-only prospect-summary" id="prospect-summary" aria-live="polite">
+            <div class="prospect-summary-head"><h3>現在のお見積り内容</h3><span class="pill" id="prospect-selection-status">選択中 0件</span></div>
+            <div class="prospect-summary-grid">
+              <div id="prospect-summary-lines"><div class="empty-state">選択内容を確認しています</div></div>
+              <div class="prospect-totals">
+                <div class="prospect-total-row"><span>税抜小計</span><strong id="prospect-subtotal">未確定</strong></div>
+                <div class="prospect-total-row"><span>消費税</span><strong id="prospect-tax">未確定</strong></div>
+                <div class="prospect-total-row grand"><span>税込合計</span><strong id="prospect-total">未確定</strong></div>
+                <div class="mini" id="prospect-total-note" style="margin-top:.45rem">月次顧問料の確定後に合計を表示します。</div>
+              </div>
+            </div>
+          </div>
+
           <div id="monthly-services">
             <div class="grid two">
-              <label class="inline-check" id="closing-corp-row"><input id="corp-closing" type="checkbox"><span><b>法人決算・申告一式</b><br><span class="mini">最終月次顧問料の4か月分</span></span></label>
-              <label class="inline-check hidden" id="corp-closing-waiver-row"><input id="corp-closing-waiver" type="checkbox"><span>申告業務を松本会計が受託しない</span></label>
-              <label class="inline-check" id="closing-sole-row"><input id="sole-closing" type="checkbox"><span><b>所得税決算・確定申告一式</b><br><span class="mini">個人月次顧問先：最終月次顧問料の4か月分</span></span></label>
-              <label class="inline-check hidden" id="sole-closing-waiver-row"><input id="sole-closing-waiver" type="checkbox"><span>申告業務を松本会計が受託しない</span></label>
-              <label class="field"><span class="field-name">消費税申告の有無 <span class="required-mark">*</span></span><select id="consumption-tax-status"><option value="unconfirmed">未確認</option><option value="none">免税又は申告不要</option><option value="required">申告あり（月次顧問料の2か月分）</option></select></label>
+              <label class="inline-check prospect-choice" id="closing-corp-row"><input id="corp-closing" type="checkbox"><span><b>法人決算・申告一式</b><br><span class="mini">最終月次顧問料の4か月分</span><span class="prospect-impact" id="corp-closing-impact">金額を確認中</span></span></label>
+              <label class="inline-check prospect-choice hidden" id="corp-closing-waiver-row"><input id="corp-closing-waiver" type="checkbox"><span>今回は法人決算・申告を見積りに含めないことを確認</span></label>
+              <label class="inline-check prospect-choice" id="closing-sole-row"><input id="sole-closing" type="checkbox"><span><b>所得税決算・確定申告一式</b><br><span class="mini">個人月次顧問先：最終月次顧問料の4か月分</span><span class="prospect-impact" id="sole-closing-impact">金額を確認中</span></span></label>
+              <label class="inline-check prospect-choice hidden" id="sole-closing-waiver-row"><input id="sole-closing-waiver" type="checkbox"><span>今回は所得税決算・確定申告を見積りに含めないことを確認</span></label>
+              <label class="field prospect-choice"><span class="field-name">消費税申告の有無 <span class="required-mark">*</span></span><select id="consumption-tax-status"><option value="unconfirmed">未確認</option><option value="none">免税又は申告不要</option><option value="required">申告あり（月次顧問料の2か月分）</option></select><span class="prospect-impact" id="consumption-tax-impact">申告の有無を確認してください</span></label>
             </div>
           </div>
 
@@ -219,13 +278,13 @@
           <details open id="annual-services">
             <summary>年末調整・償却資産税申告</summary>
             <div class="details-body section-stack">
-              <div class="service-row">
+              <div class="service-row prospect-choice-row">
                 <label class="inline-check"><input id="year-end-base" type="checkbox"><span><b>年末調整 基本料金</b><br><span class="mini" id="year-end-scope"></span></span></label>
                 <span class="pill">20,000円</span>
                 <label class="field"><span class="field-name">源泉徴収票発行人数</span><input id="year-end-count" type="number" min="0" value="0"></label>
                 <span class="mini">3,000円／人</span>
               </div>
-              <div class="service-row">
+              <div class="service-row prospect-choice-row">
                 <label class="inline-check"><input id="asset-tax" type="checkbox"><span><b>償却資産税申告</b><br><span class="mini">基本料金＋追加提出先</span></span></label>
                 <span class="pill">基本10,000円</span>
                 <label class="field"><span class="field-name">対象市町村数</span><input id="asset-tax-count" type="number" min="1" value="1"></label>
@@ -237,30 +296,33 @@
           <details open id="software-services">
             <summary>ソフトウェアレンタル</summary>
             <div class="details-body section-stack">
-              <p class="mini">顧客請求額と松本会計の月額直接原価を分けて管理します。直接原価は所内で確認するまで未設定です。</p>
+              <p class="mini internal-mode-only">顧客請求額と松本会計の月額直接原価を分けて管理します。直接原価は所内で確認するまで未設定です。</p>
               <div id="software-list"></div>
               <div class="grid three">
                 <label class="field"><span class="field-name">任意追加ソフト名</span><input id="custom-software-name" type="text"></label>
                 <label class="field"><span class="field-name">顧客への月額請求額</span><input id="custom-software-price" type="text" inputmode="numeric" data-money></label>
-                <label class="field"><span class="field-name">松本会計の月額直接原価</span><input id="custom-software-cost" type="text" inputmode="numeric" data-money placeholder="未設定"></label>
+                <label class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価</span><input id="custom-software-cost" type="text" inputmode="numeric" data-money placeholder="未設定"></label>
               </div>
-              <label class="inline-check"><input id="custom-software-selected" type="checkbox"><span>任意追加ソフトを見積りに含める</span></label>
-              <span class="pill" id="custom-software-gross">月額粗利益：未確定</span>
+              <label class="inline-check prospect-choice"><input id="custom-software-selected" type="checkbox"><span>任意追加ソフトを見積りに含める</span></label>
+              <span class="pill internal-mode-only" id="custom-software-gross">月額粗利益：未確定</span>
             </div>
           </details>
 
           <details id="other-services">
             <summary>その他年次・スポット報酬／年間調整</summary>
-            <div class="details-body grid three">
-              <label class="field"><span class="field-name">その他業務名</span><input id="other-spot-name" type="text" placeholder="例：個別相談業務"></label>
-              <label class="field"><span class="field-name">その他年次・スポット報酬</span><input id="other-spot-fee" type="text" inputmode="numeric" data-money></label>
-              <label class="field"><span class="field-name">年間調整額（±）</span><input id="annual-adjustment" type="text" inputmode="numeric" data-money><span class="mini">従来の自由調整。月額の業務量調整とは別です。</span></label>
+            <div class="details-body section-stack">
+              <label class="inline-check prospect-choice"><input id="other-spot-selected" type="checkbox"><span>その他年次・スポット業務を見積りに含める</span></label>
+              <div class="grid three">
+                <label class="field"><span class="field-name">その他業務名</span><input id="other-spot-name" type="text" placeholder="例：個別相談業務"></label>
+                <label class="field"><span class="field-name">その他年次・スポット報酬</span><input id="other-spot-fee" type="text" inputmode="numeric" data-money></label>
+                <label class="field internal-mode-only"><span class="field-name">年間調整額（±）</span><input id="annual-adjustment" type="text" inputmode="numeric" data-money><span class="mini">従来の自由調整。月額の業務量調整とは別です。</span></label>
+              </div>
             </div>
           </details>
         </div>
       </section>
 
-      <section class="card" id="cost-section">
+      <section class="card internal-mode-only" id="cost-section">
         <div class="card-hd"><h2>4. 年間原価・原価下限</h2><span class="pill">社内用</span></div>
         <div class="card-bd section-stack">
           <div class="help">所内標準原価単価は、顧客への請求単価ではなく、所内採算を確認するための原価単価です。給与、人件費及び間接費との関係を所内基準により確認してください。</div>
@@ -282,7 +344,7 @@
         </div>
       </section>
 
-      <section class="card" id="decision-section">
+      <section class="card internal-mode-only" id="decision-section">
         <div class="card-hd"><h2>5. 推奨額・最終額・例外理由</h2><span class="pill">担当者・責任者確認</span></div>
         <div class="card-bd section-stack">
           <div class="metric-grid">
@@ -303,7 +365,7 @@
         </div>
       </section>
 
-      <section class="card" id="comparison-section">
+      <section class="card internal-mode-only" id="comparison-section">
         <div class="card-hd"><h2>6. 現行報酬との比較・段階改定</h2><span class="pill">既存関与先向け</span></div>
         <div class="card-bd section-stack">
           <div class="grid three">
@@ -326,7 +388,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card" id="scope-section">
         <div class="card-hd"><h2>7. 見積書の業務範囲・備考</h2></div>
         <div class="card-bd grid two">
           <label class="field"><span class="field-name">業務範囲</span><textarea id="scope-text" placeholder="例：月次監査、税務相談、決算・申告業務"></textarea></label>
@@ -334,7 +396,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section class="card internal-mode-only" id="validation-section">
         <div class="card-hd"><h2>出力前チェック</h2><span class="pill" id="validation-count">未確認</span></div>
         <div class="card-bd"><div id="validation-errors" class="section-stack"></div></div>
       </section>
@@ -388,7 +450,7 @@
         <button type="button" class="btn danger" id="reset-button">初期化</button>
         <button type="button" class="btn" id="preview-button">見積プレビュー</button>
         <button type="button" class="btn primary" id="customer-print-button" disabled>顧客向け印刷/PDF</button>
-        <button type="button" class="btn primary" id="internal-print-button" disabled>社内印刷/PDF</button>
+        <button type="button" class="btn primary internal-mode-only" id="internal-print-button" disabled>社内印刷/PDF</button>
       </div>
     </div>
   </div>
