@@ -57,6 +57,7 @@
     .hidden { display:none!important; }
     .pill { display:inline-flex; gap:.3rem; align-items:center; border:1px solid var(--line); background:#fff; border-radius:999px; padding:.25rem .6rem; font-size:.82rem; }
     .pill b { color:var(--primary-dark); }
+    .pill.ok { color:#165a43; border-color:#8fcbb5; background:#ecf8f3; }
     .metric-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.65rem; }
     .metric { border:1px solid var(--line); border-radius:12px; padding:.7rem; background:#fbfdfd; min-width:0; }
     .metric span { display:block; color:var(--sub); font-size:.76rem; margin-bottom:.25rem; }
@@ -120,6 +121,14 @@
     .value-flow-value { display:block; margin:.35rem 0; font-size:1.08rem; font-weight:900; overflow-wrap:anywhere; }
     .value-flow-arrow { display:flex; align-items:center; justify-content:center; color:var(--primary); font-size:1.5rem; font-weight:900; }
     .value-diagram-note { margin:0 1rem 1rem; padding:.65rem .8rem; border-radius:10px; background:#fff8ea; border:1px solid #e8c58d; color:#69430d; font-size:.84rem; line-height:1.6; }
+    dialog { width:min(560px,calc(100% - 2rem)); border:0; border-radius:16px; padding:0; color:var(--ink); box-shadow:0 18px 70px rgba(10,35,43,.3); }
+    dialog::backdrop { background:rgba(11,31,38,.62); }
+    .dialog-hd { padding:1rem; border-bottom:1px solid var(--line); background:#f3f8f9; }
+    .dialog-hd h2 { margin:0; font-size:1.05rem; }
+    .dialog-bd { padding:1rem; }
+    .dialog-actions { display:flex; gap:.55rem; justify-content:flex-end; flex-wrap:wrap; margin-top:1rem; }
+    .approval-summary { border:2px solid #9fc7d1; border-radius:14px; padding:.85rem; background:#f5fbfc; }
+    .print-approval { text-align:center; font-weight:900; color:#8a3a12; border:2px solid #c8793b; padding:.45rem; margin-bottom:.8rem; }
     .print-area { margin-top:1rem; }
     .paper { background:#fff; color:#111; border:1px solid #aab4b7; max-width:1050px; margin:1rem auto; padding:18px; }
     .paper h1 { text-align:center; letter-spacing:.18em; font-size:1.45rem; margin:.1rem 0 1rem; }
@@ -142,7 +151,7 @@
       .grid.two,.grid.three,.metric-grid,.prospect-summary-grid { grid-template-columns:1fr; }
       .value-flow { grid-template-columns:1fr; }
       .value-flow-arrow { min-height:26px; transform:rotate(90deg); }
-      .adjust-row,.service-row,.software-row { grid-template-columns:1fr 1fr; }
+      .adjust-row,.service-row,.software-row,body.mode-prospect .software-row { grid-template-columns:1fr 1fr; }
       .quote-head { display:block; }
       .issuer { margin-top:1rem; min-width:0; }
     }
@@ -154,7 +163,7 @@
       .segmented button { flex:1; padding:.48rem .25rem; font-size:.82rem; }
       .value-formula { display:grid; grid-template-columns:1fr; }
       .value-plus { min-height:22px; }
-      .adjust-row,.service-row,.software-row,.phase-row { grid-template-columns:1fr; }
+      .adjust-row,.service-row,.software-row,.phase-row,body.mode-prospect .software-row { grid-template-columns:1fr; }
       .card-bd { padding:.8rem; }
       .sticky-actions .mini { display:none; }
       .paper { padding:10px; border:0; }
@@ -163,7 +172,7 @@
     @media print {
       @page { size:A4; margin:10mm; }
       body { background:#fff; }
-      header,footer,main > :not(.print-area),.sticky-actions,.screen-only { display:none!important; }
+      header,footer,main > :not(.print-area),.sticky-actions,.screen-only,dialog { display:none!important; }
       main { margin:0; padding:0; max-width:none; }
       .print-area { display:block!important; margin:0; }
       .print-area.hidden,.print-area.print-blocked { display:none!important; }
@@ -189,15 +198,17 @@
   </header>
 
   <main>
-    <section class="card screen-only" id="interaction-mode-panel">
+    <section class="card screen-only" id="interaction-mode-panel" tabindex="-1">
       <div class="card-hd">
         <h2>表示</h2>
         <div class="mode-control">
+          <button type="button" class="btn danger" id="new-quote-button">新しい見積りを開始</button>
           <button type="button" class="btn" id="internal-mode-toggle" aria-pressed="false">所内詳細</button>
         </div>
       </div>
       <div class="card-bd">
         <p class="mode-description" id="mode-description">見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。</p>
+        <p class="mini" id="mode-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
 
@@ -244,7 +255,7 @@
               <div class="value-flow-arrow" aria-hidden="true">→</div>
               <div class="value-flow-step"><span class="value-flow-label" id="value-diagram-conversion">× 12 ÷ 12か月</span><strong class="value-flow-value" id="value-diagram-annualized">未入力</strong><span class="mini">12か月換算後</span></div>
               <div class="value-flow-arrow" aria-hidden="true">→</div>
-              <div class="value-flow-step accent"><span class="value-flow-label">標準報酬の参考帯</span><strong class="value-flow-value" id="value-diagram-band">判定前</strong><span id="value-diagram-fee">月額基準：判定前</span><button type="button" class="btn prospect-only" id="adopt-diagram-standard" style="margin-top:.65rem" disabled>この月額基準を見積りに反映</button></div>
+              <div class="value-flow-step accent"><span class="value-flow-label">標準報酬の参考帯</span><strong class="value-flow-value" id="value-diagram-band">判定前</strong><span id="value-diagram-fee">月額基準：判定前</span><button type="button" class="btn prospect-only" id="adopt-diagram-standard" style="margin-top:.65rem" disabled>参考月額として反映</button></div>
               <div class="value-flow-arrow" aria-hidden="true">→</div>
               <div class="value-flow-step"><span class="value-flow-label">次の確認</span><strong class="value-flow-value">受託業務を選択</strong><span class="mini">業務内容・税務難易度・支援内容と総合</span></div>
             </div>
@@ -290,7 +301,7 @@
           </div>
 
           <div class="prospect-only prospect-summary" id="prospect-summary" aria-live="polite">
-            <div class="prospect-summary-head"><h3>現在のお見積り内容</h3><span class="pill" id="prospect-selection-status">選択中 0件</span></div>
+            <div class="prospect-summary-head"><h3>現在のお見積り内容</h3><div class="actions"><span class="pill" id="prospect-approval-label">参考表示・所内未承認</span><span class="pill" id="prospect-selection-status">選択中 0件</span></div></div>
             <div class="prospect-summary-grid">
               <div id="prospect-summary-lines"><div class="empty-state">選択内容を確認しています</div></div>
               <div class="prospect-totals">
@@ -375,10 +386,21 @@
           <div class="metric-grid">
             <div class="metric"><span>年間直接原価</span><strong id="annual-direct-cost">未確定</strong></div>
             <div class="metric"><span>必要年間売上</span><strong id="required-annual-revenue">未確定</strong></div>
-            <div class="metric"><span>非月次顧問売上</span><strong id="non-monthly-revenue">—</strong></div>
+            <div class="metric"><span>月額連動月数</span><strong id="linked-revenue-months">未確定</strong></div>
+            <div class="metric"><span>固定年間売上</span><strong id="fixed-annual-revenue">未確定</strong></div>
             <div class="metric"><span>原価下限月額</span><strong id="cost-floor">未確定</strong></div>
-            <div class="metric"><span>年間利益</span><strong id="annual-profit">未確定</strong></div>
-            <div class="metric"><span>利益率</span><strong id="actual-margin">未確定</strong></div>
+            <div class="metric"><span>原価下限での年間売上</span><strong id="annual-revenue-at-floor">未確定</strong></div>
+            <div class="metric"><span>必要年間売上との差</span><strong id="floor-revenue-surplus">未確定</strong></div>
+          </div>
+          <h3 style="margin-bottom:0">年間利益構造</h3>
+          <div class="metric-grid">
+            <div class="metric"><span>直接原価控除後利益</span><strong id="direct-cost-profit">未確定</strong></div>
+            <div class="metric"><span>直接原価控除後利益率</span><strong id="direct-cost-profit-rate">未確定</strong></div>
+            <div class="metric"><span>間接費配賦額</span><strong id="allocated-overhead">未確定</strong></div>
+            <div class="metric"><span>配賦後利益</span><strong id="post-allocation-profit">未確定</strong></div>
+            <div class="metric"><span>配賦後利益率</span><strong id="post-allocation-profit-rate">未確定</strong></div>
+            <div class="metric"><span>目標利益額</span><strong id="target-profit-amount">未確定</strong></div>
+            <div class="metric"><span>目標利益額との差</span><strong id="target-profit-difference">未確定</strong></div>
           </div>
         </div>
       </section>
@@ -401,6 +423,32 @@
           </div>
           <label class="field"><span class="field-name">例外理由・判断メモ</span><textarea id="exception-memo" placeholder="基準額や原価下限を下回る場合、推奨額から10%以上乖離する場合、段階改定を採用する場合は必須"></textarea></label>
           <div id="decision-alerts" class="section-stack"></div>
+        </div>
+      </section>
+
+      <section class="card internal-mode-only" id="approval-section">
+        <div class="card-hd"><h2>所内確認・承認</h2><span class="pill" id="approval-status">未承認</span></div>
+        <div class="card-bd section-stack">
+          <div class="alert warn" id="price-master-warning">価格マスターの適用開始日、最終確認日又は承認者が未設定です。正式運用前にpricing-config.jsを更新してください。</div>
+          <div class="alert danger hidden" id="approval-change-alert">承認後に見積内容が変更されたため、再度所内確認が必要です。</div>
+          <div class="approval-summary metric-grid">
+            <div class="metric"><span>承認対象月額</span><strong id="approval-target-monthly">未確定</strong></div>
+            <div class="metric"><span>原価下限</span><strong id="approval-cost-floor">未確定</strong></div>
+            <div class="metric"><span>推奨月額</span><strong id="approval-recommended">未確定</strong></div>
+            <div class="metric"><span>例外理由</span><strong id="approval-exception">なし</strong></div>
+          </div>
+          <div class="grid two">
+            <label class="field"><span class="field-name">原価下限未確認の例外理由</span><select id="cost-floor-exception-reason"><option value="">該当なし</option><option>原価データ未整備</option><option>新規案件で工数見積り困難</option><option>戦略的案件</option><option>業務範囲を限定</option><option>既存価格表による標準見積り</option><option>その他</option></select></label>
+            <label class="field"><span class="field-name">例外の詳細メモ</span><textarea id="cost-floor-exception-memo" placeholder="原価下限を確認できない理由と判断内容を入力"></textarea></label>
+          </div>
+          <div class="grid three">
+            <label class="field"><span class="field-name">承認者 <span class="required-mark">*</span></span><input id="approval-approved-by" type="text" autocomplete="off"></label>
+            <label class="field"><span class="field-name">承認日</span><input id="approval-approved-at" type="date"></label>
+            <label class="field"><span class="field-name">所内詳細の自動復帰（分）</span><input id="internal-timeout-minutes" type="number" min="1" step="1"></label>
+          </div>
+          <label class="field"><span class="field-name">承認メモ</span><textarea id="approval-note"></textarea></label>
+          <div id="approval-errors" class="section-stack"></div>
+          <div class="actions"><button type="button" class="btn ok" id="approve-quote-button">この見積内容を承認</button><button type="button" class="btn danger" id="revoke-approval-button">承認を解除</button></div>
         </div>
       </section>
 
@@ -444,6 +492,7 @@
     <section class="print-area hidden" id="print-area">
       <article class="paper" id="customer-quote">
         <h1>御 見 積 書</h1>
+        <div class="print-approval" id="print-approval-label">参考表示・所内未承認</div>
         <div class="quote-head">
           <div><strong id="print-client">—</strong> <span id="print-suffix">御中</span><p>下記の通りお見積もり申し上げます。</p></div>
           <div class="issuer"><div>見積日：<span id="print-date"></span></div><div>見積番号：<span id="print-number"></span></div><br><b>税理士法人松本会計事務所</b><div id="print-office"></div><div id="print-address"></div><div id="print-tel"></div><div id="print-representative"></div></div>
@@ -480,13 +529,32 @@
     </section>
   </main>
 
+  <dialog id="internal-confirm-dialog">
+    <div class="dialog-hd"><h2>所内詳細を表示します</h2></div>
+    <div class="dialog-bd section-stack">
+      <p>所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。</p>
+      <p class="mini">これは機密保護のための認証ではなく、対面時の誤表示を防ぐ確認です。</p>
+      <label class="field"><span class="field-name" id="internal-confirm-instruction"></span><input id="internal-confirm-input" type="text" autocomplete="off"></label>
+      <div class="alert danger hidden" id="internal-confirm-error"></div>
+      <div class="dialog-actions"><button type="button" class="btn" id="internal-confirm-cancel">キャンセル</button><button type="button" class="btn primary" id="internal-confirm-submit">所内詳細を表示</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="recovery-dialog">
+    <div class="dialog-hd"><h2 id="recovery-dialog-title">前回の作業中データがあります</h2></div>
+    <div class="dialog-bd">
+      <p id="recovery-dialog-message">前回の下書きは自動表示しません。</p>
+      <div class="dialog-actions"><button type="button" class="btn danger" id="recovery-new">新しい見積りを開始</button><button type="button" class="btn primary" id="recovery-restore">前回の下書きを復元</button></div>
+    </div>
+  </dialog>
+
   <footer class="screen-only">© 税理士法人松本会計事務所｜標準報酬算定ツール <b data-app-version></b></footer>
 
   <div class="sticky-actions screen-only">
     <div>
       <span class="mini">顧客向け出力には社内原価・利益率・例外理由を含めません。</span>
       <div class="actions">
-        <button type="button" class="btn danger" id="reset-button">初期化</button>
+        <button type="button" class="btn danger" id="reset-button">新しい見積りを開始</button>
         <button type="button" class="btn" id="preview-button">見積プレビュー</button>
         <button type="button" class="btn primary" id="customer-print-button" disabled>顧客向け印刷/PDF</button>
         <button type="button" class="btn primary internal-mode-only" id="internal-print-button" disabled>社内印刷/PDF</button>

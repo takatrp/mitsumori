@@ -15,7 +15,7 @@
     boundary: '料金帯の境界付近です。前後の帯、直近複数期の付加価値額及び業務内容を確認し、最終報酬を個別に決定してください。',
     shortPeriod: '短期事業年度のため、12か月換算値を料金帯判定に使用しています。',
     adjustmentMissing: '調整項目が選択されていますが、調整額が未設定です。',
-    softwareCostMissing: 'ソフトウェア直接原価が未設定のため、原価下限及び利益率は確定していません。',
+    softwareCostMissing: 'ソフトウェア直接原価が未設定のため、原価下限及び配賦後利益率は確定していません。',
     largeRevision: '改定幅が大きいため、段階改定又は業務範囲の見直しを検討してください。'
   };
 
@@ -109,6 +109,7 @@
     const definitions = config.valueAddedFields[entityType];
     const missingFields = [];
     const invalidFields = [];
+    const fieldErrors = [];
     const normalizedValues = {};
 
     definitions.forEach(function (definition) {
@@ -122,6 +123,17 @@
         invalidFields.push(definition.key);
         return;
       }
+      const minimum = definition.minimum === null || definition.minimum === undefined ? null : toNumber(definition.minimum);
+      if (definition.allowNegative !== true && Number.isFinite(minimum) && number < minimum) {
+        invalidFields.push(definition.key);
+        fieldErrors.push({
+          key: definition.key,
+          label: definition.label,
+          code: 'value_below_minimum',
+          message: definition.label + 'は原則として' + formatInteger(minimum) + '円以上で入力してください。'
+        });
+        return;
+      }
       normalizedValues[definition.key] = number;
     });
 
@@ -131,10 +143,11 @@
         value: null,
         missingFields: missingFields,
         invalidFields: invalidFields,
+        fieldErrors: fieldErrors,
         reason: missingFields.length ? 'missing_required_values' : 'invalid_values',
         message: missingFields.length
           ? '付加価値額の必須項目に未入力があります。0円の場合は0を入力してください。'
-          : '付加価値額の入力値を確認してください。'
+          : (fieldErrors.length ? fieldErrors[0].message : '付加価値額の入力値を確認してください。')
       };
     }
 
@@ -658,95 +671,182 @@
     };
   }
 
-  function calculateNonMonthlyRevenue(input) {
+  function calculateLinkedRevenueMonths(input) {
     const payload = input || {};
-    if (payload.nonMonthlyRevenue !== undefined) return toNumber(payload.nonMonthlyRevenue);
-    const softwareMonthlyRevenue = payload.softwareMonthlyRevenue !== undefined
-      ? toNumber(payload.softwareMonthlyRevenue)
-      : sumSoftwareBilling(payload.softwareItems);
+    const entityType = normalizeEntity(payload.entityType || payload.entity || payload.type);
+    if (entityType !== 'corp' && entityType !== 'sole') return NaN;
+    const corporateMultiplier = finiteOr(payload.corporateClosingMultiplier, config.multipliers.corporateClosing);
+    const soleMultiplier = finiteOr(payload.soleClosingMultiplier, config.multipliers.soleProprietorClosingAndReturn);
+    const consumptionMultiplier = finiteOr(payload.consumptionTaxMultiplier, config.multipliers.consumptionTaxReturn);
+    if (![corporateMultiplier, soleMultiplier, consumptionMultiplier].every(function (value) { return Number.isFinite(value) && value >= 0; })) return NaN;
+    let months = 12;
+    if (entityType === 'corp' && payload.corporateClosingSelected === true) months += corporateMultiplier;
+    if (entityType === 'sole' && payload.soleClosingSelected === true) months += soleMultiplier;
+    if (['required', '申告あり'].includes(payload.consumptionTaxStatus)) months += consumptionMultiplier;
+    return months;
+  }
+
+  function calculateFixedAnnualRevenue(input) {
+    const payload = input || {};
+    if (payload.fixedAnnualRevenue !== undefined) return toNumber(payload.fixedAnnualRevenue);
+    let softwareMonthlyRevenue;
+    if (payload.softwareMonthlyRevenue !== undefined) {
+      softwareMonthlyRevenue = toNumber(payload.softwareMonthlyRevenue);
+    } else {
+      const softwareItems = Array.isArray(payload.softwareItems) ? payload.softwareItems : [];
+      const selectedItems = softwareItems.filter(function (item) { return item && item.selected !== false; });
+      const softwareValues = selectedItems.map(function (item) {
+        const amount = toNumber(item.monthlyBillingPrice !== undefined ? item.monthlyBillingPrice : item.price);
+        const quantity = finiteOr(item.quantity, 1);
+        return Number.isFinite(amount) && Number.isFinite(quantity) && quantity >= 0 ? amount * quantity : NaN;
+      });
+      softwareMonthlyRevenue = softwareValues.every(Number.isFinite)
+        ? softwareValues.reduce(function (sum, value) { return sum + value; }, 0)
+        : NaN;
+    }
     const values = [
       softwareMonthlyRevenue * 12,
-      finiteOr(payload.closingFee !== undefined ? payload.closingFee : payload.corporateClosingFee, 0),
-      finiteOr(payload.soleClosingFee !== undefined ? payload.soleClosingFee : payload.personalClosingFee, 0),
-      finiteOr(payload.consumptionTaxReturnFee !== undefined ? payload.consumptionTaxReturnFee : payload.consumptionTaxFee, 0),
       finiteOr(payload.yearEndAdjustmentFee, 0),
       finiteOr(payload.depreciableAssetsFee, 0),
-      finiteOr(payload.otherAnnualSpotRevenue !== undefined ? payload.otherAnnualSpotRevenue : payload.otherAnnualFee, 0)
+      finiteOr(payload.otherAnnualSpotRevenue !== undefined ? payload.otherAnnualSpotRevenue : payload.otherAnnualFee, 0),
+      finiteOr(payload.annualAdjustmentAmount, 0)
     ];
     return values.every(Number.isFinite) ? values.reduce(function (sum, value) { return sum + value; }, 0) : NaN;
+  }
+
+  function emptyCostFloorFields(annualCost, overrides) {
+    return Object.assign({}, annualCost, {
+      linkedRevenueMonths: null,
+      fixedAnnualRevenue: null,
+      rawMonthlyCostFloor: null,
+      monthlyCostFloor: null,
+      annualRevenueAtFloor: null,
+      requiredAnnualRevenue: null,
+      revenueSurplusAtFloor: null
+    }, overrides || {});
   }
 
   function calculateCostFloor(input) {
     const payload = input || {};
     const annualCost = calculateAnnualCost(payload);
     if (annualCost.status !== 'calculated') {
-      return Object.assign({}, annualCost, {
-        requiredAnnualRevenue: null,
-        nonMonthlyRevenue: null,
-        rawMonthlyCostFloor: null,
-        monthlyCostFloor: null
-      });
+      return emptyCostFloorFields(annualCost);
     }
 
     if (isMissing(payload.targetProfitRate)) {
-      return Object.assign({}, annualCost, {
+      return emptyCostFloorFields(annualCost, {
         status: 'manual_required',
-        requiredAnnualRevenue: null,
-        nonMonthlyRevenue: null,
-        rawMonthlyCostFloor: null,
-        monthlyCostFloor: null,
         reason: 'target_profit_rate_missing',
-        message: '目標利益率を入力してください。'
+        message: '目標利益率又は間接費率が未入力のため、原価下限を確定できません。'
+      });
+    }
+    if (isMissing(payload.overheadRate)) {
+      return emptyCostFloorFields(annualCost, {
+        status: 'manual_required',
+        reason: 'overhead_rate_missing',
+        message: '目標利益率又は間接費率が未入力のため、原価下限を確定できません。'
       });
     }
     const targetProfitRate = normalizeRate(payload.targetProfitRate);
-    const overheadRate = isMissing(payload.overheadRate) ? 0 : normalizeRate(payload.overheadRate);
+    const overheadRate = normalizeRate(payload.overheadRate);
     if (!Number.isFinite(targetProfitRate) || !Number.isFinite(overheadRate) || targetProfitRate < 0 || overheadRate < 0) {
-      return Object.assign({}, annualCost, {
+      return emptyCostFloorFields(annualCost, {
         status: 'invalid',
-        requiredAnnualRevenue: null,
-        nonMonthlyRevenue: null,
-        rawMonthlyCostFloor: null,
-        monthlyCostFloor: null,
         reason: 'invalid_profit_or_overhead_rate'
       });
     }
     if (targetProfitRate + overheadRate >= 1) {
-      return Object.assign({}, annualCost, {
+      return emptyCostFloorFields(annualCost, {
         status: 'invalid',
         targetProfitRate: targetProfitRate,
         overheadRate: overheadRate,
-        requiredAnnualRevenue: null,
-        nonMonthlyRevenue: null,
-        rawMonthlyCostFloor: null,
-        monthlyCostFloor: null,
         reason: 'rate_total_at_least_100_percent',
         message: '目標利益率と間接費率の合計が100％以上のため、原価下限を算出できません。'
       });
     }
 
-    const nonMonthlyRevenue = calculateNonMonthlyRevenue(payload);
-    if (!Number.isFinite(nonMonthlyRevenue)) {
-      return Object.assign({}, annualCost, {
+    const linkedRevenueMonths = payload.linkedRevenueMonths !== undefined
+      ? toNumber(payload.linkedRevenueMonths)
+      : calculateLinkedRevenueMonths(payload);
+    if (!Number.isFinite(linkedRevenueMonths) || linkedRevenueMonths <= 0) {
+      return emptyCostFloorFields(annualCost, {
         status: 'invalid',
-        requiredAnnualRevenue: null,
-        nonMonthlyRevenue: null,
-        rawMonthlyCostFloor: null,
-        monthlyCostFloor: null,
-        reason: 'invalid_non_monthly_revenue'
+        reason: 'invalid_linked_revenue_months',
+        message: '月額連動月数が0以下又は未確定のため、原価下限を算出できません。'
+      });
+    }
+    const fixedAnnualRevenue = calculateFixedAnnualRevenue(payload);
+    if (!Number.isFinite(fixedAnnualRevenue)) {
+      return emptyCostFloorFields(annualCost, {
+        status: 'invalid',
+        linkedRevenueMonths: linkedRevenueMonths,
+        reason: 'invalid_fixed_annual_revenue'
       });
     }
     const requiredAnnualRevenue = annualCost.annualDirectCost / (1 - targetProfitRate - overheadRate);
-    const rawMonthlyCostFloor = (requiredAnnualRevenue - nonMonthlyRevenue) / 12;
+    const rawMonthlyCostFloor = (requiredAnnualRevenue - fixedAnnualRevenue) / linkedRevenueMonths;
+    const monthlyCostFloor = Math.max(0, Math.ceil(rawMonthlyCostFloor));
+    const annualRevenueAtFloor = monthlyCostFloor * linkedRevenueMonths + fixedAnnualRevenue;
     return Object.assign({}, annualCost, {
       status: 'calculated',
       targetProfitRate: targetProfitRate,
       overheadRate: overheadRate,
       requiredAnnualRevenue: requiredAnnualRevenue,
-      nonMonthlyRevenue: nonMonthlyRevenue,
+      linkedRevenueMonths: linkedRevenueMonths,
+      fixedAnnualRevenue: fixedAnnualRevenue,
       rawMonthlyCostFloor: rawMonthlyCostFloor,
-      monthlyCostFloor: Math.max(0, Math.ceil(rawMonthlyCostFloor))
+      monthlyCostFloor: monthlyCostFloor,
+      annualRevenueAtFloor: annualRevenueAtFloor,
+      revenueSurplusAtFloor: annualRevenueAtFloor - requiredAnnualRevenue
     });
+  }
+
+  function calculateProfitStructure(input) {
+    const payload = input || {};
+    const annualRevenue = toNumber(payload.annualRevenue);
+    const annualDirectCost = toNumber(payload.annualDirectCost);
+    if (!Number.isFinite(annualRevenue) || annualRevenue <= 0 || !Number.isFinite(annualDirectCost)) {
+      return { status: 'invalid', reason: 'invalid_revenue_or_direct_cost' };
+    }
+    const directCostProfit = annualRevenue - annualDirectCost;
+    const directCostProfitRate = directCostProfit / annualRevenue;
+    const targetProfitRate = isMissing(payload.targetProfitRate) ? null : normalizeRate(payload.targetProfitRate);
+    if (isMissing(payload.overheadRate)) {
+      return {
+        status: 'manual_required',
+        annualRevenue: annualRevenue,
+        annualDirectCost: annualDirectCost,
+        directCostProfit: directCostProfit,
+        directCostProfitRate: directCostProfitRate,
+        allocatedOverhead: null,
+        postAllocationProfit: null,
+        postAllocationProfitRate: null,
+        targetProfitAmount: Number.isFinite(targetProfitRate) ? annualRevenue * targetProfitRate : null,
+        differenceFromTargetProfit: null,
+        reason: 'overhead_rate_missing'
+      };
+    }
+    const overheadRate = normalizeRate(payload.overheadRate);
+    if (!Number.isFinite(overheadRate) || overheadRate < 0 || (targetProfitRate !== null && (!Number.isFinite(targetProfitRate) || targetProfitRate < 0))) {
+      return { status: 'invalid', reason: 'invalid_profit_or_overhead_rate' };
+    }
+    const allocatedOverhead = annualRevenue * overheadRate;
+    const postAllocationProfit = directCostProfit - allocatedOverhead;
+    const targetProfitAmount = Number.isFinite(targetProfitRate) ? annualRevenue * targetProfitRate : null;
+    return {
+      status: 'calculated',
+      annualRevenue: annualRevenue,
+      annualDirectCost: annualDirectCost,
+      overheadRate: overheadRate,
+      targetProfitRate: targetProfitRate,
+      directCostProfit: directCostProfit,
+      directCostProfitRate: directCostProfit / annualRevenue,
+      allocatedOverhead: allocatedOverhead,
+      postAllocationProfit: postAllocationProfit,
+      postAllocationProfitRate: postAllocationProfit / annualRevenue,
+      targetProfitAmount: targetProfitAmount,
+      differenceFromTargetProfit: Number.isFinite(targetProfitAmount) ? postAllocationProfit - targetProfitAmount : null
+    };
   }
 
   function calculateRecommendation(input) {
@@ -889,6 +989,48 @@
     };
   }
 
+  function validateIncomeTaxBaseRequirement(input) {
+    const payload = input || {};
+    const selectedIds = Array.isArray(payload.selectedItemIds)
+      ? payload.selectedItemIds.map(String)
+      : (Array.isArray(payload.items) ? payload.items.filter(function (item) { return item && item.selected === true; }).map(function (item) { return String(item.id); }) : []);
+    const definitions = Array.isArray(payload.definitions) ? payload.definitions : config.services.incomeTaxReturn;
+    const selected = new Set(selectedIds);
+    const baseDefinition = definitions.find(function (item) { return item.pricingRole === 'base'; });
+    const requiredBy = definitions.filter(function (item) { return selected.has(String(item.id)) && item.requiresBase === true; }).map(function (item) { return item.id; });
+    const baseSelected = Boolean(baseDefinition && selected.has(String(baseDefinition.id)));
+    return {
+      valid: requiredBy.length === 0 || baseSelected,
+      baseRequired: requiredBy.length > 0,
+      baseSelected: baseSelected,
+      baseId: baseDefinition ? baseDefinition.id : null,
+      requiredBy: requiredBy
+    };
+  }
+
+  function stableNormalize(value) {
+    if (Array.isArray(value)) return value.map(stableNormalize);
+    if (value && typeof value === 'object') {
+      return Object.keys(value).sort().reduce(function (result, key) {
+        result[key] = stableNormalize(value[key]);
+        return result;
+      }, {});
+    }
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    return value === undefined ? null : value;
+  }
+
+  function calculateApprovalFingerprint(snapshot) {
+    const text = JSON.stringify(stableNormalize(snapshot || {}));
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return 'r63-' + (hash >>> 0).toString(16).padStart(8, '0');
+  }
+
   function validateExternalOutput(input) {
     const payload = input || {};
     const errors = [];
@@ -926,6 +1068,9 @@
     }
     if (entityType === 'income' && payload.requiredFilingConfirmed === false) {
       add('income_filing_unconfirmed', '所得税確定申告業務の内容を確認してください。');
+    }
+    if (entityType === 'income' && payload.incomeBaseRequirementValid === false) {
+      add('income_base_required', '加算項目を含むため、所得税確定申告基本報酬が必要です。');
     }
 
     if (entityType === 'corp' || entityType === 'sole') {
@@ -976,6 +1121,17 @@
       }
     });
 
+    const approvalChanged = payload.approvalChanged === true
+      || (payload.approvalStatus === 'approved'
+        && payload.approvalFingerprint
+        && payload.currentApprovalFingerprint
+        && payload.approvalFingerprint !== payload.currentApprovalFingerprint);
+    if (approvalChanged) {
+      add('approval_changed', '承認後に内容が変更されたため、再承認が必要です。');
+    } else if (payload.approvalStatus !== 'approved') {
+      add('approval_required', '所内承認が完了していないため、正式な見積書を出力できません。');
+    }
+
     return {
       allowed: errors.length === 0,
       valid: errors.length === 0,
@@ -995,10 +1151,15 @@
     calculateAnnualEstimate: calculateAnnualEstimate,
     calculateAdjustmentTotal: calculateAdjustmentTotal,
     calculateAnnualCost: calculateAnnualCost,
+    calculateLinkedRevenueMonths: calculateLinkedRevenueMonths,
+    calculateFixedAnnualRevenue: calculateFixedAnnualRevenue,
     calculateCostFloor: calculateCostFloor,
+    calculateProfitStructure: calculateProfitStructure,
     calculateRecommendation: calculateRecommendation,
     calculateFeeDifference: calculateFeeDifference,
     buildPhasedRevision: buildPhasedRevision,
+    validateIncomeTaxBaseRequirement: validateIncomeTaxBaseRequirement,
+    calculateApprovalFingerprint: calculateApprovalFingerprint,
     validateExternalOutput: validateExternalOutput,
     messages: Object.freeze(MESSAGES)
   });

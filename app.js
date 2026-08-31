@@ -97,11 +97,12 @@
     return result;
   }
 
-  function baseState() {
+  function baseState(preferencesInput) {
+    const preferences = preferencesInput || {};
     return {
-      entity: localStorage.getItem(config.storageKeys.legacyEntity) || 'corp',
+      entity: 'corp',
       interactionMode: 'prospect',
-      document: { clientName: '', quoteDate: localToday(), quoteNumber: '', startDate: '', office: 'kobe', outputType: 'customer-only', scope: '', notes: '' },
+      document: { clientName: '', quoteDate: localToday(), quoteNumber: '', startDate: '', office: preferences.office || 'kobe', outputType: 'customer-only', scope: '', notes: '' },
       fiscalMonths: 12,
       ownerLaborCompensation: config.ownerLaborCompensation,
       valueValues: emptyValueState(),
@@ -125,15 +126,17 @@
         income: initialIncomeServices()
       },
       cost: {
-        rates: Object.assign({}, config.standardCostRates),
+        rates: Object.assign({}, config.standardCostRates, preferences.standardCostRates || {}),
         monthlyHours: { playing: 0, manager: 0, executive: 0 },
         annualHours: { playing: 0, manager: 0, executive: 0 },
         targetProfitRate: null,
         overheadRate: null,
         otherAnnualDirectCost: 0
       },
-      decision: { finalMonthlyFee: null, finalFeeConfirmed: false, confirmationSource: '', exceptionReason: '', exceptionMemo: '' },
+      decision: { finalMonthlyFee: null, finalFeeConfirmed: false, confirmationSource: '', exceptionReason: '', exceptionMemo: '', costFloorExceptionReason: '', costFloorExceptionMemo: '' },
+      approval: { status: 'unapproved', approvedBy: '', approvedAt: '', approvalNote: '', approvalFingerprint: '', approvalSource: '', invalidatedByChange: false },
       comparison: { currentMonthlyFee: 0, currentClosingFee: 0, currentConsumptionTaxFee: 0, currentAnnualFee: null, revisionDate: '', steps: 1, phases: [] },
+      preferences: { internalModeTimeoutMinutes: Number.isFinite(Number(preferences.internalModeTimeoutMinutes)) ? Number(preferences.internalModeTimeoutMinutes) : config.internalModeTimeoutMinutes },
       previewVisible: false
     };
   }
@@ -156,7 +159,9 @@
     merged.cost.monthlyHours = Object.assign({}, defaults.cost.monthlyHours, stored.cost && stored.cost.monthlyHours);
     merged.cost.annualHours = Object.assign({}, defaults.cost.annualHours, stored.cost && stored.cost.annualHours);
     merged.decision = Object.assign({}, defaults.decision, stored.decision || {});
+    merged.approval = Object.assign({}, defaults.approval, stored.approval || {});
     merged.comparison = Object.assign({}, defaults.comparison, stored.comparison || {});
+    merged.preferences = Object.assign({}, defaults.preferences, stored.preferences || {});
     if (!['corp', 'sole', 'income'].includes(merged.entity)) merged.entity = 'corp';
     // 画面を開いた時は必ず見込客向け表示から開始し、所内詳細はその都度明示操作で開く。
     merged.interactionMode = 'prospect';
@@ -169,28 +174,68 @@
     return merged;
   }
 
-  function loadState() {
+  function parseStoredJson(storage, key) {
     try {
-      const raw = localStorage.getItem(config.storageKeys.state);
-      if (raw) return mergeStored(baseState(), JSON.parse(raw));
-      const migrated = baseState();
-      const legacyRaw = localStorage.getItem(config.storageKeys.legacyCostState);
-      if (legacyRaw) {
-        const legacy = JSON.parse(legacyRaw);
-        const legacyRates = legacy && legacy.rates ? legacy.rates : {};
-        const legacyHours = legacy && legacy.hours ? legacy.hours : {};
-        const roleMap = { playing: 'play', manager: 'mgr', executive: 'exec' };
-        Object.keys(roleMap).forEach((role) => {
-          const rate = parseNumber(legacyRates[roleMap[role]]);
-          const hours = parseNumber(legacyHours[roleMap[role]]);
-          if (Number.isFinite(rate) && rate >= 0) migrated.cost.rates[role] = rate;
-          if (Number.isFinite(hours) && hours >= 0) migrated.cost.monthlyHours[role] = hours;
-        });
-      }
-      return migrated;
+      const raw = storage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
     } catch (error) {
-      return baseState();
+      return null;
     }
+  }
+
+  function loadPreferences() {
+    const stored = parseStoredJson(localStorage, config.storageKeys.preferences) || {};
+    return {
+      office: ['kobe', 'sakaiminato'].includes(stored.office) ? stored.office : 'kobe',
+      standardCostRates: Object.assign({}, config.standardCostRates, stored.standardCostRates || {}),
+      internalModeTimeoutMinutes: Number.isFinite(Number(stored.internalModeTimeoutMinutes)) && Number(stored.internalModeTimeoutMinutes) > 0
+        ? Number(stored.internalModeTimeoutMinutes)
+        : config.internalModeTimeoutMinutes
+    };
+  }
+
+  function applyLegacyCostState(target, legacyCost) {
+    if (!legacyCost || typeof legacyCost !== 'object') return target;
+    const legacyRates = legacyCost.rates || {};
+    const legacyHours = legacyCost.hours || {};
+    const roleMap = { playing: 'play', manager: 'mgr', executive: 'exec' };
+    Object.keys(roleMap).forEach((role) => {
+      const rate = parseNumber(legacyRates[roleMap[role]]);
+      const hours = parseNumber(legacyHours[roleMap[role]]);
+      if (Number.isFinite(rate) && rate >= 0) target.cost.rates[role] = rate;
+      if (Number.isFinite(hours) && hours >= 0) target.cost.monthlyHours[role] = hours;
+    });
+    return target;
+  }
+
+  function readLegacyCandidate(defaults) {
+    const storedState = parseStoredJson(localStorage, config.storageKeys.state);
+    if (storedState) return mergeStored(defaults, storedState);
+    const legacyCost = parseStoredJson(localStorage, config.storageKeys.legacyCostState);
+    if (legacyCost) return applyLegacyCostState(defaults, legacyCost);
+    return null;
+  }
+
+  const devicePreferences = loadPreferences();
+  let pendingRecovery = null;
+  function loadState() {
+    const defaults = baseState(devicePreferences);
+    const sessionDraft = parseStoredJson(sessionStorage, config.storageKeys.sessionQuote);
+    const restoreOnce = sessionStorage.getItem(config.storageKeys.restoreOnce);
+    if (restoreOnce === 'session' && sessionDraft) {
+      sessionStorage.removeItem(config.storageKeys.restoreOnce);
+      return mergeStored(defaults, sessionDraft);
+    }
+    if (sessionDraft) {
+      pendingRecovery = { type: 'session', data: sessionDraft };
+      return defaults;
+    }
+    const legacyDraft = readLegacyCandidate(defaults);
+    if (legacyDraft) {
+      pendingRecovery = { type: 'legacy', data: legacyDraft };
+      return defaults;
+    }
+    return defaults;
   }
 
   let state = loadState();
@@ -198,9 +243,135 @@
   let initializing = true;
 
   function saveState() {
-    if (initializing) return;
-    localStorage.setItem(config.storageKeys.state, JSON.stringify(state));
-    localStorage.setItem(config.storageKeys.legacyEntity, state.entity);
+    if (initializing || pendingRecovery) return;
+    const approvalInvalidated = invalidateApprovalIfChanged();
+    sessionStorage.setItem(config.storageKeys.sessionQuote, JSON.stringify(state));
+    localStorage.setItem(config.storageKeys.preferences, JSON.stringify({
+      office: state.document.office,
+      standardCostRates: state.cost.rates,
+      internalModeTimeoutMinutes: state.preferences.internalModeTimeoutMinutes
+    }));
+    if (approvalInvalidated) {
+      renderApprovalPanel();
+      renderValidation();
+    }
+  }
+
+  function buildApprovalSnapshot() {
+    const sortedAdjustments = Object.values(state.adjustments).map((item) => ({
+      id: item.id,
+      selected: item.selected === true,
+      monthlyAmount: item.monthlyAmount,
+      memo: item.memo || ''
+    })).sort((a, b) => a.id.localeCompare(b.id));
+    const software = Object.values(state.services.software).concat([state.services.customSoftware]).map((item) => ({
+      id: item.id,
+      name: item.name || '',
+      selected: item.selected === true,
+      quantity: item.quantity,
+      monthlyBillingPrice: item.monthlyBillingPrice
+    })).sort((a, b) => a.id.localeCompare(b.id));
+    const income = Object.values(state.services.income).map((item) => ({
+      id: item.id,
+      selected: item.selected === true,
+      quantity: item.quantity,
+      price: item.price,
+      priceConfirmed: item.priceConfirmed === true
+    })).sort((a, b) => a.id.localeCompare(b.id));
+    return {
+      clientName: state.document.clientName,
+      entity: state.entity,
+      valueValues: state.valueValues,
+      fiscalMonths: state.fiscalMonths,
+      ownerLaborCompensation: state.ownerLaborCompensation,
+      finalMonthlyFee: state.decision.finalMonthlyFee,
+      finalFeeConfirmed: state.decision.finalFeeConfirmed,
+      confirmationSource: state.decision.confirmationSource,
+      adjustments: sortedAdjustments,
+      services: {
+        corporateClosingSelected: state.services.corporateClosingSelected,
+        corporateReturnNotEngagedConfirmed: state.services.corporateReturnNotEngagedConfirmed,
+        soleClosingSelected: state.services.soleClosingSelected,
+        soleReturnNotEngagedConfirmed: state.services.soleReturnNotEngagedConfirmed,
+        consumptionTaxStatusByEntity: state.services.consumptionTaxStatusByEntity,
+        yearEndSelected: state.services.yearEndSelected,
+        yearEndCount: state.services.yearEndCount,
+        assetTaxSelected: state.services.assetTaxSelected,
+        assetTaxCount: state.services.assetTaxCount,
+        otherSpotName: state.services.otherSpotName,
+        otherSpotFee: state.services.otherSpotFee,
+        otherSpotSelected: state.services.otherSpotSelected,
+        annualAdjustment: state.services.annualAdjustment,
+        software,
+        income
+      },
+      cost: {
+        rates: state.cost.rates,
+        monthlyHours: state.cost.monthlyHours,
+        annualHours: state.cost.annualHours,
+        targetProfitRate: state.cost.targetProfitRate,
+        overheadRate: state.cost.overheadRate,
+        otherAnnualDirectCost: state.cost.otherAnnualDirectCost
+      },
+      effectiveDate: state.document.startDate,
+      scope: state.document.scope,
+      notes: state.document.notes,
+      exceptionReason: state.decision.exceptionReason,
+      exceptionMemo: state.decision.exceptionMemo,
+      costFloorExceptionReason: state.decision.costFloorExceptionReason,
+      costFloorExceptionMemo: state.decision.costFloorExceptionMemo
+    };
+  }
+
+  function currentApprovalFingerprint() {
+    return core.calculateApprovalFingerprint(buildApprovalSnapshot());
+  }
+
+  function invalidateApprovalIfChanged() {
+    if (state.approval.status !== 'approved' || !state.approval.approvalFingerprint) return false;
+    if (state.approval.approvalFingerprint === currentApprovalFingerprint()) return false;
+    state.approval.status = 'unapproved';
+    state.approval.invalidatedByChange = true;
+    return true;
+  }
+
+  let internalIdleTimer = null;
+  function stopInternalIdleTimer() {
+    if (internalIdleTimer) window.clearTimeout(internalIdleTimer);
+    internalIdleTimer = null;
+  }
+
+  function startInternalIdleTimer() {
+    stopInternalIdleTimer();
+    const minutes = Number(state.preferences.internalModeTimeoutMinutes) || config.internalModeTimeoutMinutes;
+    internalIdleTimer = window.setTimeout(() => {
+      setInteractionMode('prospect');
+      $('mode-notice').textContent = '一定時間操作がなかったため、見込客向け画面へ戻りました。';
+    }, Math.max(1, minutes) * 60 * 1000);
+  }
+
+  function handleInternalActivity() {
+    if (state.interactionMode === 'internal') startInternalIdleTimer();
+  }
+
+  // 静的サイト上のアクセス制御ではなく、対面中に所内情報を誤表示しないための確認手順。
+  function requestInternalMode() {
+    $('internal-confirm-input').value = '';
+    $('internal-confirm-error').classList.add('hidden');
+    $('internal-confirm-dialog').showModal();
+    $('internal-confirm-input').focus();
+  }
+
+  function confirmInternalMode() {
+    const configuredCode = String(config.internalAccessConfirmationCode || '');
+    const expected = configuredCode || config.internalDisplayConfirmationPhrase;
+    if ($('internal-confirm-input').value !== expected) {
+      $('internal-confirm-error').textContent = configuredCode ? '所内確認用コードが一致しません。' : '確認文「' + expected + '」を入力してください。';
+      $('internal-confirm-error').classList.remove('hidden');
+      return;
+    }
+    $('internal-confirm-dialog').close();
+    setInteractionMode('internal');
   }
 
   function currentConsumptionTaxStatus() {
@@ -233,6 +404,18 @@
     if (mode === 'prospect' && state.document.outputType !== 'customer-only') {
       state.document.outputType = 'customer-only';
       $('output-type').value = 'customer-only';
+    }
+    if (mode === 'internal') {
+      $('mode-notice').textContent = '';
+      startInternalIdleTimer();
+    } else {
+      stopInternalIdleTimer();
+      $('print-area').classList.add('hidden');
+      state.previewVisible = false;
+      if (shouldRecalculate !== false) {
+        $('interaction-mode-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('internal-mode-toggle').focus();
+      }
     }
     applyOutputMode(state.document.outputType);
     if (shouldRecalculate !== false) recalculate(); else saveState();
@@ -369,7 +552,7 @@
     $('value-diagram-fee').textContent = bandReady ? '月額基準：' + yen(model.bandResult.fee) : (model.bandResult && model.bandResult.status === 'manual_required' ? '月額基準：個別見積り' : '月額基準：判定前');
     const standardApplied = bandReady && state.decision.finalFeeConfirmed && state.decision.confirmationSource === 'standard' && state.decision.finalMonthlyFee === model.bandResult.fee;
     $('adopt-diagram-standard').disabled = !bandReady || standardApplied;
-    $('adopt-diagram-standard').textContent = standardApplied ? '月額基準を反映済み' : 'この月額基準を見積りに反映';
+    $('adopt-diagram-standard').textContent = standardApplied ? '参考月額を反映済み' : '参考月額として反映';
   }
 
   function renderAdjustments() {
@@ -434,7 +617,7 @@
       const row = document.createElement('div');
       row.className = 'service-row prospect-choice-row';
       row.dataset.incomeServiceId = definition.id;
-      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b><br><span class="mini">' + escapeHtml(definition.note || '') + (definition.minimumPrice ? '（最低価格）' : '') + '</span></span></label><label class="field"><span class="field-name">数量</span><input type="number" min="0" step="1"></label><label class="field"><span class="field-name">単価</span><input type="text" inputmode="numeric" data-money ' + (definition.editable ? '' : 'readonly') + '></label>' + (definition.priceConfirmationRequired ? '<label class="inline-check"><input type="checkbox" data-confirm><span>単価を確認</span></label>' : '<span class="mini"><span class="internal-mode-only">所内標準価格</span><span class="prospect-only">表示単価</span></span>');
+      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b><br><span class="mini">' + escapeHtml(definition.note || '') + (definition.minimumPrice ? '（最低価格）' : '') + '</span></span></label><label class="field"><span class="field-name">数量</span><input type="number" min="1" step="1"></label><label class="field"><span class="field-name">単価</span><input type="text" inputmode="numeric" data-money ' + (definition.editable ? '' : 'readonly') + '></label>' + (definition.priceConfirmationRequired ? '<label class="inline-check"><input type="checkbox" data-confirm><span>単価を確認</span></label>' : '<span class="mini"><span class="internal-mode-only">所内標準価格</span><span class="prospect-only">表示単価</span></span>');
       const checkbox = row.querySelector('input[type="checkbox"]');
       const qtyInput = row.querySelector('input[type="number"]');
       const priceInput = row.querySelector('input[data-money]');
@@ -443,8 +626,27 @@
       qtyInput.value = item.quantity || 1;
       priceInput.value = formatNumber(item.price);
       if (confirmInput) confirmInput.checked = item.priceConfirmed;
-      checkbox.addEventListener('change', () => { item.selected = checkbox.checked; recalculate(); });
-      qtyInput.addEventListener('input', () => { item.quantity = Math.max(0, numberOrZero(qtyInput.value)); recalculate(); });
+      checkbox.addEventListener('change', () => {
+        if (definition.pricingRole === 'base' && !checkbox.checked) {
+          const dependency = core.validateIncomeTaxBaseRequirement({
+            selectedItemIds: Object.values(state.services.income).filter((candidate) => candidate.selected && candidate.id !== definition.id).map((candidate) => candidate.id)
+          });
+          if (dependency.baseRequired) {
+            item.selected = true;
+            checkbox.checked = true;
+            window.alert('加算項目が選択されているため、所得税確定申告基本報酬を外せません。');
+            return;
+          }
+        }
+        item.selected = checkbox.checked;
+        if (item.selected && definition.requiresBase === true) {
+          const baseDefinition = config.services.incomeTaxReturn.find((candidate) => candidate.pricingRole === 'base');
+          if (baseDefinition) state.services.income[baseDefinition.id].selected = true;
+          renderIncomeServices();
+        }
+        recalculate();
+      });
+      qtyInput.addEventListener('input', () => { item.quantity = Math.max(1, Math.floor(numberOrZero(qtyInput.value) || 1)); recalculate(); });
       if (definition.editable) priceInput.addEventListener('input', () => { item.price = parseNumber(priceInput.value); if (definition.priceConfirmationRequired) item.priceConfirmed = false; recalculate(); });
       priceInput.addEventListener('blur', () => { if (Number.isFinite(item.price)) priceInput.value = formatNumber(item.price); });
       if (confirmInput) confirmInput.addEventListener('change', () => { item.priceConfirmed = confirmInput.checked; recalculate(); });
@@ -513,7 +715,7 @@
     return config.services.incomeTaxReturn.reduce((lines, definition) => {
       const item = state.services.income[definition.id];
       if (!item.selected) return lines;
-      lines.push({ amount: item.price, quantity: item.quantity || 1, frequency: 'annual', name: item.name, id: item.id });
+      lines.push({ amount: item.price, quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)), frequency: 'annual', name: item.name, id: item.id, pricingRole: definition.pricingRole, requiresBase: definition.requiresBase });
       return lines;
     }, []);
   }
@@ -562,35 +764,42 @@
     if (state.entity === 'income') {
       const estimate = computeAnnualEstimate(0);
       const comparison = core.calculateFeeDifference({ currentMonthlyFee: 0, proposedMonthlyFee: 0, currentAnnualFee: numberOrZero(state.comparison.currentAnnualFee), proposedAnnualFee: estimate.subtotal });
-      return { adjustmentResult, valueResult: null, annualized: null, bandResult: null, boundary: null, costFloor: null, recommendation: null, estimate, comparison };
+      return { adjustmentResult, valueResult: null, annualized: null, bandResult: null, boundary: null, costFloor: null, recommendation: null, profitStructure: null, estimate, comparison };
     }
     const valueResult = core.calculateValueAdded({ entityType: state.entity, values: state.valueValues[state.entity], ownerLaborCompensation: state.ownerLaborCompensation });
     const annualized = valueResult.status === 'calculated' ? core.annualizeValue(valueResult.value, Number(state.fiscalMonths)) : { status: 'invalid', annualizedValue: null, isShortPeriod: false, message: '' };
     const bandResult = annualized.status === 'calculated' ? core.determinePricingBand(state.entity, annualized.annualizedValue) : { status: 'invalid', fee: null, label: '', message: valueResult.message || annualized.message };
     const boundary = annualized.status === 'calculated' ? core.findBoundaryWarning(state.entity, annualized.annualizedValue, config.boundaryWarningRate) : { isNearBoundary: false };
-    const provisional = provisionalMonthlyFee(bandResult, adjustmentResult);
-    const provisionalEstimate = computeAnnualEstimate(provisional);
-    const breakdown = provisionalEstimate.breakdown || {};
     const costFloor = core.calculateCostFloor({
+      entityType: state.entity,
       standardCostRates: state.cost.rates,
       monthlyHours: state.cost.monthlyHours,
       annualHours: state.cost.annualHours,
-      softwareItems: selectedSoftware(),
       otherAnnualDirectCost: state.cost.otherAnnualDirectCost,
       targetProfitRate: percentInputToRatio(state.cost.targetProfitRate),
       overheadRate: percentInputToRatio(state.cost.overheadRate),
-      corporateClosingFee: breakdown.corporateClosingFee,
-      soleClosingFee: breakdown.soleClosingFee,
-      consumptionTaxReturnFee: breakdown.consumptionTaxReturnFee,
-      yearEndAdjustmentFee: breakdown.yearEndAdjustmentFee,
-      depreciableAssetsFee: breakdown.depreciableAssetsFee,
-      otherAnnualSpotRevenue: breakdown.otherAnnualFee,
+      corporateClosingSelected: state.entity === 'corp' && state.services.corporateClosingSelected,
+      soleClosingSelected: state.entity === 'sole' && state.services.soleClosingSelected,
+      consumptionTaxStatus: currentConsumptionTaxStatus() === 'none' ? 'exempt' : currentConsumptionTaxStatus(),
+      corporateClosingMultiplier: config.multipliers.corporateClosing,
+      soleClosingMultiplier: config.multipliers.soleProprietorClosingAndReturn,
+      consumptionTaxMultiplier: config.multipliers.consumptionTaxReturn,
+      yearEndAdjustmentFee: yearEndFee(),
+      depreciableAssetsFee: assetTaxFee(),
+      otherAnnualSpotRevenue: state.services.otherSpotSelected ? numberOrZero(state.services.otherSpotFee) : 0,
+      annualAdjustmentAmount: numberOrZero(state.services.annualAdjustment),
       softwareItems: selectedSoftware()
     });
     const recommendation = bandResult.status === 'calculated' && costFloor.status === 'calculated'
       ? core.calculateRecommendation({ bandResult, adjustmentAmount: adjustmentResult.monthlyAdjustmentAmount, costFloorResult: costFloor, finalMonthlyFee: state.decision.finalMonthlyFee, exceptionReason: (state.decision.exceptionReason + ' ' + state.decision.exceptionMemo).trim(), usesPhasedRevision: Number(state.comparison.steps) > 1 })
       : null;
     const estimate = computeAnnualEstimate(state.decision.finalMonthlyFee);
+    const profitStructure = core.calculateProfitStructure({
+      annualRevenue: estimate && estimate.subtotal,
+      annualDirectCost: costFloor && costFloor.annualDirectCost,
+      overheadRate: percentInputToRatio(state.cost.overheadRate),
+      targetProfitRate: percentInputToRatio(state.cost.targetProfitRate)
+    });
     const currentAnnualInput = Number.isFinite(state.comparison.currentAnnualFee) ? state.comparison.currentAnnualFee : undefined;
     const comparison = core.calculateFeeDifference({
       currentMonthlyFee: state.comparison.currentMonthlyFee,
@@ -600,10 +809,11 @@
       proposedMonthlyFee: numberOrZero(state.decision.finalMonthlyFee),
       proposedAnnualFee: estimate.subtotal
     });
-    return { adjustmentResult, valueResult, annualized, bandResult, boundary, costFloor, recommendation, estimate, comparison, provisionalEstimate };
+    return { adjustmentResult, valueResult, annualized, bandResult, boundary, costFloor, recommendation, profitStructure, estimate, comparison };
   }
 
-  function buildValidation() {
+  function buildValidation(options) {
+    const settings = Object.assign({ ignoreApproval: false }, options || {});
     const specialServices = config.services.incomeTaxReturn.filter((definition) => definition.priceConfirmationRequired).map((definition) => {
       const item = state.services.income[definition.id];
       return { selected: state.entity === 'income' && item.selected, priceConfirmationRequired: true, priceConfirmed: item.priceConfirmed };
@@ -617,6 +827,12 @@
       state.services.customSoftware.name,
       ...quoteLines().map((line) => line.name)
     ].join(' ');
+    const incomeBaseRequirement = core.validateIncomeTaxBaseRequirement({
+      selectedItemIds: Object.values(state.services.income).filter((item) => item.selected).map((item) => item.id)
+    });
+    const fingerprint = currentApprovalFingerprint();
+    const approvalChanged = state.approval.invalidatedByChange === true
+      || (state.approval.status === 'approved' && state.approval.approvalFingerprint !== fingerprint);
     const result = core.validateExternalOutput({
       clientName: state.document.clientName,
       quoteDate: state.document.quoteDate,
@@ -629,6 +845,7 @@
       soleClosingSelected: state.services.soleClosingSelected,
       soleReturnNotEngagedConfirmed: state.services.soleReturnNotEngagedConfirmed,
       requiredFilingConfirmed: state.entity !== 'income' || selectedIncomeLines().length > 0,
+      incomeBaseRequirementValid: incomeBaseRequirement.valid,
       consumptionTaxStatus: currentConsumptionTaxStatus() === 'none' ? 'exempt' : currentConsumptionTaxStatus(),
       annualTotal: model.estimate && model.estimate.subtotal,
       pricingBandStatus: model.bandResult && model.bandResult.status,
@@ -636,13 +853,18 @@
       boundaryWarning: Boolean(model.boundary && model.boundary.isNearBoundary),
       finalFeeConfirmed: state.decision.finalFeeConfirmed,
       specialServices,
-      renderedText
+      renderedText,
+      approvalStatus: settings.ignoreApproval ? 'approved' : state.approval.status,
+      approvalFingerprint: settings.ignoreApproval ? fingerprint : state.approval.approvalFingerprint,
+      currentApprovalFingerprint: fingerprint,
+      approvalChanged: settings.ignoreApproval ? false : approvalChanged
     });
     const errors = result.errors.slice();
     const add = (code, message) => { if (!errors.some((error) => error.code === code)) errors.push({ code, message }); };
     if (state.entity !== 'income' && model.recommendation && model.recommendation.exceptionReasonRequired && !model.recommendation.exceptionReasonProvided) add('exception_reason_missing', '基準額・原価下限・推奨額との乖離について例外理由を入力してください。');
     if (state.entity !== 'income' && !model.recommendation && Number.isFinite(state.decision.finalMonthlyFee) && model.bandResult && Number.isFinite(model.bandResult.fee) && state.decision.finalMonthlyFee < model.bandResult.fee && !(state.decision.exceptionReason + state.decision.exceptionMemo).trim()) add('exception_reason_missing', '最終月次顧問料が付加価値帯基準額を下回るため、例外理由を入力してください。');
     if (state.entity !== 'income' && model.adjustmentResult.status === 'invalid') add('invalid_adjustment_amount', '業務量・複雑性の調整額を数値で入力してください。');
+    if (state.entity !== 'income' && model.costFloor.status !== 'calculated' && !(state.decision.costFloorExceptionReason && state.decision.costFloorExceptionMemo.trim())) add('cost_floor_exception_missing', '原価下限が未確定です。所内詳細で「原価下限未確認」の例外理由と詳細メモを入力してください。');
     if (!state.document.scope.trim()) add('scope_missing', '見積書に記載する業務範囲を入力してください。');
     selectedSoftware().forEach((software) => {
       if (!Number.isFinite(software.monthlyBillingPrice) || software.monthlyBillingPrice < 0) add('software_billing_invalid', '選択したソフトウェアの顧客請求額を確認してください。');
@@ -697,13 +919,20 @@
       $('final-fee-summary').textContent = Number.isFinite(state.decision.finalMonthlyFee) ? yen(state.decision.finalMonthlyFee) + '／月' : '未確定';
       $('annual-direct-cost').textContent = Number.isFinite(model.costFloor.annualDirectCost) ? yen(model.costFloor.annualDirectCost) : '未確定';
       $('required-annual-revenue').textContent = Number.isFinite(model.costFloor.requiredAnnualRevenue) ? yen(model.costFloor.requiredAnnualRevenue) : '未確定';
-      $('non-monthly-revenue').textContent = Number.isFinite(model.costFloor.nonMonthlyRevenue) ? yen(model.costFloor.nonMonthlyRevenue) : '—';
-      const actualProfit = model.costFloor.status === 'calculated' && model.estimate.status === 'calculated' ? model.estimate.subtotal - model.costFloor.annualDirectCost : null;
-      $('annual-profit').textContent = Number.isFinite(actualProfit) ? yen(actualProfit) : '未確定';
-      $('actual-margin').textContent = Number.isFinite(actualProfit) && model.estimate.subtotal > 0 ? percent(actualProfit / model.estimate.subtotal * 100) : '未確定';
+      $('linked-revenue-months').textContent = Number.isFinite(model.costFloor.linkedRevenueMonths) ? model.costFloor.linkedRevenueMonths + 'か月' : '未確定';
+      $('fixed-annual-revenue').textContent = Number.isFinite(model.costFloor.fixedAnnualRevenue) ? yen(model.costFloor.fixedAnnualRevenue) : '未確定';
+      $('annual-revenue-at-floor').textContent = Number.isFinite(model.costFloor.annualRevenueAtFloor) ? yen(model.costFloor.annualRevenueAtFloor) : '未確定';
+      $('floor-revenue-surplus').textContent = Number.isFinite(model.costFloor.revenueSurplusAtFloor) ? yen(model.costFloor.revenueSurplusAtFloor) : '未確定';
+      const profit = model.profitStructure || {};
+      $('direct-cost-profit').textContent = Number.isFinite(profit.directCostProfit) ? yen(profit.directCostProfit) : '未確定';
+      $('direct-cost-profit-rate').textContent = Number.isFinite(profit.directCostProfitRate) ? percent(profit.directCostProfitRate * 100) : '未確定';
+      $('allocated-overhead').textContent = Number.isFinite(profit.allocatedOverhead) ? yen(profit.allocatedOverhead) : '未確定';
+      $('post-allocation-profit').textContent = Number.isFinite(profit.postAllocationProfit) ? yen(profit.postAllocationProfit) : '未確定';
+      $('post-allocation-profit-rate').textContent = Number.isFinite(profit.postAllocationProfitRate) ? percent(profit.postAllocationProfitRate * 100) : '未確定';
+      $('target-profit-amount').textContent = Number.isFinite(profit.targetProfitAmount) ? yen(profit.targetProfitAmount) : '未確定';
+      $('target-profit-difference').textContent = Number.isFinite(profit.differenceFromTargetProfit) ? yen(profit.differenceFromTargetProfit) : '未確定';
       const costAlerts = [];
       if (model.costFloor.message) costAlerts.push(alertHtml(model.costFloor.message, model.costFloor.status === 'invalid' ? 'danger' : 'warn'));
-      if (state.cost.overheadRate === null) costAlerts.push(alertHtml('間接費率は未設定です。算定時は0％として扱われます。所内基準を確認してください。', 'warn'));
       $('cost-alerts').innerHTML = costAlerts.join('');
       const decisionAlerts = [];
       if (!model.recommendation) decisionAlerts.push(alertHtml('原価下限が未確定のため、推奨月次顧問料は確定していません。最終額は担当者が判断してください。', 'warn'));
@@ -712,6 +941,7 @@
       renderComparison();
     }
     renderProspectSummary();
+    renderApprovalPanel();
     renderValidation();
     renderPrintDocuments();
   }
@@ -788,8 +1018,9 @@
       config.services.incomeTaxReturn.forEach((definition) => {
         const item = state.services.income[definition.id];
         if (!item.selected) return;
-        const amountReady = Number.isFinite(item.price) && item.price >= 0;
-        lines.push({ name: item.name, detail: '単価 × ' + (item.quantity || 1) + '件', annual: amountReady ? item.price * (item.quantity || 1) : null, pending: !amountReady, optional: true });
+        const amountReady = Number.isFinite(item.price) && (definition.pricingRole === 'adjustment' || item.price >= 0);
+        const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+        lines.push({ name: item.name, detail: '単価 × ' + quantity + '件', annual: amountReady ? item.price * quantity : null, pending: !amountReady, optional: true });
       });
       return lines;
     }
@@ -830,6 +1061,9 @@
   }
 
   function renderProspectSummary() {
+    const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
+    $('prospect-approval-label').textContent = approved ? '所内承認済み' : '参考表示・所内未承認';
+    $('prospect-approval-label').classList.toggle('ok', approved);
     const fee = state.decision.finalMonthlyFee;
     const feeReady = Number.isFinite(fee) && fee > 0 && state.decision.finalFeeConfirmed;
     $('corp-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.corporateClosing) + ' を加算（月額×' + config.multipliers.corporateClosing + '）' : '月次顧問料の確定後に年間加算額を表示';
@@ -869,6 +1103,9 @@
     $('print-start-date').textContent = displayDate(state.document.startDate);
     $('print-scope').textContent = state.document.scope || '';
     $('print-notes').textContent = state.document.notes || '';
+    const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
+    $('print-approval-label').textContent = approved ? '' : '参考表示・所内未承認';
+    $('print-approval-label').classList.toggle('hidden', approved);
     $('print-total').textContent = estimate && estimate.status === 'calculated' ? yen(estimate.total) + '（税込）' : '未確定';
     $('quote-rows').innerHTML = quoteLines().map((line) => '<tr><td>' + escapeHtml(line.name) + '</td><td>' + escapeHtml(line.unit) + '</td><td>' + escapeHtml(line.quantity) + '</td><td class="money">' + yen(line.annual) + '</td></tr>').join('') || '<tr><td colspan="4" class="empty-state">見積項目がありません</td></tr>';
     $('quote-totals').innerHTML = estimate && estimate.status === 'calculated' ? '<tr><th>小計</th><td class="money">' + yen(estimate.subtotal) + '</td></tr><tr><th>消費税 ' + (config.taxRate * 100) + '%</th><td class="money">' + yen(estimate.consumptionTax) + '</td></tr><tr><th>税込合計</th><td class="money"><b>' + yen(estimate.total) + '</b></td></tr>' : '';
@@ -926,13 +1163,67 @@
     $('internal-cost-summary').innerHTML = tableRows([
       ['年間直接原価', Number.isFinite(model.costFloor.annualDirectCost) ? yen(model.costFloor.annualDirectCost) : '未確定'],
       ['必要年間売上', Number.isFinite(model.costFloor.requiredAnnualRevenue) ? yen(model.costFloor.requiredAnnualRevenue) : '未確定'],
-      ['非月次顧問売上', Number.isFinite(model.costFloor.nonMonthlyRevenue) ? yen(model.costFloor.nonMonthlyRevenue) : '未確定'],
+      ['月額連動月数', Number.isFinite(model.costFloor.linkedRevenueMonths) ? model.costFloor.linkedRevenueMonths + 'か月' : '未確定'],
+      ['固定年間売上', Number.isFinite(model.costFloor.fixedAnnualRevenue) ? yen(model.costFloor.fixedAnnualRevenue) : '未確定'],
       ['原価下限月額', Number.isFinite(model.costFloor.monthlyCostFloor) ? yen(model.costFloor.monthlyCostFloor) : '未確定'],
+      ['原価下限での年間売上', Number.isFinite(model.costFloor.annualRevenueAtFloor) ? yen(model.costFloor.annualRevenueAtFloor) : '未確定'],
+      ['直接原価控除後利益', model.profitStructure && Number.isFinite(model.profitStructure.directCostProfit) ? yen(model.profitStructure.directCostProfit) : '未確定'],
+      ['間接費配賦額', model.profitStructure && Number.isFinite(model.profitStructure.allocatedOverhead) ? yen(model.profitStructure.allocatedOverhead) : '未確定'],
+      ['配賦後利益', model.profitStructure && Number.isFinite(model.profitStructure.postAllocationProfit) ? yen(model.profitStructure.postAllocationProfit) : '未確定'],
+      ['配賦後利益率', model.profitStructure && Number.isFinite(model.profitStructure.postAllocationProfitRate) ? percent(model.profitStructure.postAllocationProfitRate * 100) : '未確定'],
       ['目標利益率', state.cost.targetProfitRate === null ? '未設定' : percent(Number(state.cost.targetProfitRate))],
       ['間接費率', state.cost.overheadRate === null ? '未設定' : percent(Number(state.cost.overheadRate))],
       ['ソフトウェア直接原価', model.costFloor.reason === 'software_direct_cost_missing' ? '未設定' : (Number.isFinite(model.costFloor.annualSoftwareDirectCost) ? yen(model.costFloor.annualSoftwareDirectCost) + '／年' : '—')]
     ]);
     $('internal-hours').innerHTML = Object.keys(roleLabels).map((role) => '<tr><td>' + roleLabels[role] + '</td><td class="money">' + yen(state.cost.rates[role]) + '／時</td><td class="money">' + state.cost.monthlyHours[role] + '</td><td class="money">' + state.cost.annualHours[role] + '</td></tr>').join('');
+  }
+
+  function approvalEligibility() {
+    const errors = buildValidation({ ignoreApproval: true }).errors.slice();
+    if (!String(state.approval.approvedBy || '').trim()) errors.push({ code: 'approver_missing', message: '承認者を入力してください。' });
+    return { allowed: errors.length === 0, errors };
+  }
+
+  function renderApprovalPanel() {
+    const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
+    $('approval-status').textContent = approved ? '承認済み' : '未承認';
+    $('approval-status').classList.toggle('ok', approved);
+    $('approval-change-alert').classList.toggle('hidden', state.approval.invalidatedByChange !== true);
+    $('approval-target-monthly').textContent = state.entity === 'income' ? '対象外（単発報酬）' : (Number.isFinite(state.decision.finalMonthlyFee) ? yen(state.decision.finalMonthlyFee) + '／月' : '未確定');
+    $('approval-cost-floor').textContent = state.entity === 'income' ? '対象外' : (model.costFloor && model.costFloor.status === 'calculated' ? yen(model.costFloor.monthlyCostFloor) + '／月' : '未確定');
+    $('approval-recommended').textContent = state.entity === 'income' ? '対象外' : (model.recommendation ? yen(model.recommendation.recommendedMonthlyFee) + '／月' : '未確定');
+    $('approval-exception').textContent = (state.decision.exceptionReason + ' ' + state.decision.exceptionMemo).trim() || 'なし';
+    $('approve-quote-button').disabled = approved;
+    $('approve-quote-button').textContent = approved ? 'この内容は承認済み' : 'この見積内容を承認';
+    $('revoke-approval-button').disabled = !approved && !state.approval.approvalFingerprint;
+    $('approval-approved-by').disabled = approved;
+    $('approval-approved-at').disabled = approved;
+    const priceMasterIncomplete = !config.priceMaster.effectiveDate || !config.priceMaster.lastReviewedDate || !config.priceMaster.approvedBy;
+    $('price-master-warning').classList.toggle('hidden', !priceMasterIncomplete);
+  }
+
+  function approveCurrentQuote() {
+    const eligibility = approvalEligibility();
+    if (!eligibility.allowed) {
+      $('approval-errors').innerHTML = eligibility.errors.map((error) => alertHtml(error.message, 'danger')).join('');
+      return;
+    }
+    $('approval-errors').innerHTML = '';
+    state.approval.status = 'approved';
+    state.approval.approvedAt = state.approval.approvedAt || localToday();
+    state.approval.approvalSource = ['standard', 'recommended', 'manual'].includes(state.decision.confirmationSource) ? state.decision.confirmationSource : 'manual';
+    state.approval.invalidatedByChange = false;
+    state.approval.approvalFingerprint = currentApprovalFingerprint();
+    $('approval-approved-at').value = state.approval.approvedAt;
+    recalculate();
+  }
+
+  function revokeApproval() {
+    state.approval.status = 'unapproved';
+    state.approval.approvalFingerprint = '';
+    state.approval.approvalSource = '';
+    state.approval.invalidatedByChange = false;
+    recalculate();
   }
 
   function renderValidation() {
@@ -941,7 +1232,7 @@
     $('validation-count').textContent = validation.allowed ? '出力可能' : validation.errors.length + '件の確認事項';
     $('validation-errors').innerHTML = validation.allowed ? alertHtml('顧客向け出力の必須チェックを満たしています。', 'ok') : validation.errors.map((error) => alertHtml(error.message, 'danger')).join('');
     $('customer-print-button').disabled = !validation.allowed;
-    $('internal-print-button').disabled = !(model.estimate && model.estimate.status === 'calculated' && model.estimate.subtotal !== 0);
+    $('internal-print-button').disabled = !validation.allowed;
   }
 
   function applyOutputMode(mode) {
@@ -951,6 +1242,7 @@
 
   function recalculate() {
     model = calculateAll();
+    invalidateApprovalIfChanged();
     renderCalculations();
     saveState();
   }
@@ -967,12 +1259,12 @@
   function printDocument(internal) {
     model = calculateAll();
     renderCalculations();
+    const validation = buildValidation();
+    if (!validation.allowed) {
+      window.alert('正式な出力を実行できません。\n\n' + validation.errors.map((error) => '・' + error.message).join('\n'));
+      return;
+    }
     if (!internal) {
-      const validation = buildValidation();
-      if (!validation.allowed) {
-        window.alert('顧客向け出力を実行できません。\n\n' + validation.errors.map((error) => '・' + error.message).join('\n'));
-        return;
-      }
       if (state.document.outputType === 'internal') {
         state.document.outputType = 'customer-only';
         $('output-type').value = 'customer-only';
@@ -992,8 +1284,7 @@
   function handleBeforePrint() {
     model = calculateAll();
     renderPrintDocuments();
-    const internal = state.document.outputType === 'internal';
-    const blocked = !internal && !buildValidation().allowed;
+    const blocked = !buildValidation().allowed;
     $('print-area').classList.toggle('print-blocked', blocked);
     if (!blocked) $('print-area').classList.remove('hidden');
   }
@@ -1003,16 +1294,70 @@
     if (!state.previewVisible) $('print-area').classList.add('hidden');
   }
 
-  function resetTool() {
-    if (!window.confirm('この見積ツールの入力内容を初期化します。他のツールの保存内容は削除しません。よろしいですか？')) return;
+  function savePreferencesFromCandidate(candidate) {
+    if (!candidate) return;
+    const office = candidate.document && ['kobe', 'sakaiminato'].includes(candidate.document.office) ? candidate.document.office : devicePreferences.office;
+    const rates = candidate.cost && candidate.cost.rates ? candidate.cost.rates : devicePreferences.standardCostRates;
+    localStorage.setItem(config.storageKeys.preferences, JSON.stringify({
+      office,
+      standardCostRates: rates,
+      internalModeTimeoutMinutes: candidate.preferences && candidate.preferences.internalModeTimeoutMinutes
+        ? candidate.preferences.internalModeTimeoutMinutes
+        : devicePreferences.internalModeTimeoutMinutes
+    }));
+  }
+
+  function removeLegacyQuoteData() {
     config.storageKeys.all.forEach((key) => localStorage.removeItem(key));
-    state = baseState();
+  }
+
+  function startNewQuote() {
+    if (!window.confirm('現在の案件データと承認状態を消去し、新しい見積りを開始します。所内標準原価単価等の端末設定は維持します。よろしいですか？')) return;
+    sessionStorage.removeItem(config.storageKeys.sessionQuote);
+    sessionStorage.removeItem(config.storageKeys.restoreOnce);
+    if (pendingRecovery && pendingRecovery.type === 'legacy') {
+      savePreferencesFromCandidate(pendingRecovery.data);
+      removeLegacyQuoteData();
+    }
     window.location.reload();
+  }
+
+  function restorePendingDraft() {
+    if (!pendingRecovery) return;
+    if (pendingRecovery.type === 'legacy') {
+      savePreferencesFromCandidate(pendingRecovery.data);
+      sessionStorage.setItem(config.storageKeys.sessionQuote, JSON.stringify(pendingRecovery.data));
+      removeLegacyQuoteData();
+    }
+    sessionStorage.setItem(config.storageKeys.restoreOnce, 'session');
+    window.location.reload();
+  }
+
+  function discardPendingDraft() {
+    if (pendingRecovery && pendingRecovery.type === 'legacy') {
+      savePreferencesFromCandidate(pendingRecovery.data);
+      removeLegacyQuoteData();
+    }
+    sessionStorage.removeItem(config.storageKeys.sessionQuote);
+    sessionStorage.removeItem(config.storageKeys.restoreOnce);
+    window.location.reload();
+  }
+
+  function showPendingRecovery() {
+    if (!pendingRecovery) return;
+    $('recovery-dialog-title').textContent = pendingRecovery.type === 'legacy' ? '旧版の保存データがあります' : '前回の作業中データがあります';
+    $('recovery-dialog-message').textContent = pendingRecovery.type === 'legacy'
+      ? '旧版の顧客・案件データは自動表示しません。復元するか、新しい見積りを開始してください。'
+      : '前回の下書きは自動表示しません。復元するか、新しい見積りを開始してください。';
+    $('recovery-dialog').showModal();
   }
 
   function bindStaticInputs() {
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
-    $('internal-mode-toggle').addEventListener('click', () => setInteractionMode(state.interactionMode === 'internal' ? 'prospect' : 'internal'));
+    $('internal-mode-toggle').addEventListener('click', () => {
+      if (state.interactionMode === 'internal') setInteractionMode('prospect');
+      else requestInternalMode();
+    });
     setDocumentFields();
     $('period-months').value = state.fiscalMonths;
     $('period-months').addEventListener('input', () => { state.fiscalMonths = Number($('period-months').value); state.decision.finalFeeConfirmed = false; recalculate(); });
@@ -1065,6 +1410,20 @@
     $('exception-reason').value = state.decision.exceptionReason;
     $('exception-reason').addEventListener('change', () => { state.decision.exceptionReason = $('exception-reason').value; recalculate(); });
     bindText('exception-memo', state.decision, 'exceptionMemo');
+    $('cost-floor-exception-reason').value = state.decision.costFloorExceptionReason;
+    $('cost-floor-exception-reason').addEventListener('change', () => { state.decision.costFloorExceptionReason = $('cost-floor-exception-reason').value; recalculate(); });
+    bindText('cost-floor-exception-memo', state.decision, 'costFloorExceptionMemo');
+    bindText('approval-approved-by', state.approval, 'approvedBy', false);
+    $('approval-approved-at').value = state.approval.approvedAt;
+    $('approval-approved-at').addEventListener('input', () => { state.approval.approvedAt = $('approval-approved-at').value; saveState(); });
+    bindText('approval-note', state.approval, 'approvalNote', false);
+    $('internal-timeout-minutes').value = state.preferences.internalModeTimeoutMinutes;
+    $('internal-timeout-minutes').addEventListener('change', () => {
+      state.preferences.internalModeTimeoutMinutes = Math.max(1, Math.floor(numberOrZero($('internal-timeout-minutes').value) || config.internalModeTimeoutMinutes));
+      $('internal-timeout-minutes').value = state.preferences.internalModeTimeoutMinutes;
+      saveState();
+      if (state.interactionMode === 'internal') startInternalIdleTimer();
+    });
     const comparisonMoneyFields = {
       'current-monthly-fee': 'currentMonthlyFee', 'current-closing-fee': 'currentClosingFee', 'current-consumption-fee': 'currentConsumptionTaxFee', 'current-annual-fee': 'currentAnnualFee'
     };
@@ -1088,7 +1447,16 @@
     $('customer-print-button').addEventListener('click', () => printDocument(false));
     $('internal-print-button').addEventListener('click', () => printDocument(true));
     $('clear-service-selections').addEventListener('click', clearServiceSelections);
-    $('reset-button').addEventListener('click', resetTool);
+    $('approve-quote-button').addEventListener('click', approveCurrentQuote);
+    $('revoke-approval-button').addEventListener('click', revokeApproval);
+    $('internal-confirm-submit').addEventListener('click', confirmInternalMode);
+    $('internal-confirm-cancel').addEventListener('click', () => $('internal-confirm-dialog').close());
+    $('internal-confirm-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); confirmInternalMode(); } });
+    $('recovery-restore').addEventListener('click', restorePendingDraft);
+    $('recovery-new').addEventListener('click', discardPendingDraft);
+    $('new-quote-button').addEventListener('click', startNewQuote);
+    $('reset-button').addEventListener('click', startNewQuote);
+    ['pointerdown', 'keydown', 'input', 'change'].forEach((eventName) => document.addEventListener(eventName, handleInternalActivity, { passive: true }));
   }
 
   function init() {
@@ -1096,6 +1464,9 @@
     qsa('[data-app-version]').forEach((node) => { node.textContent = config.appVersion; });
     $('price-version-header').textContent = config.priceMaster.priceTableVersion;
     $('effective-date-header').textContent = config.priceMaster.effectiveDate || '所内設定が必要';
+    $('internal-confirm-instruction').textContent = config.internalAccessConfirmationCode
+      ? '所内確認用コードを入力してください。'
+      : '確認文「' + config.internalDisplayConfirmationPhrase + '」を入力してください。';
     renderAdjustments();
     renderSoftware();
     renderIncomeServices();
@@ -1108,6 +1479,7 @@
     initializing = false;
     setEntity(state.entity);
     if (state.previewVisible) $('print-area').classList.remove('hidden');
+    showPendingRecovery();
   }
 
   init();

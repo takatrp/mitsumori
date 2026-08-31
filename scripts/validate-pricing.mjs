@@ -155,6 +155,45 @@ test('付加価値項目の未入力と0円を区別する', () => {
   assert.deepEqual(incomplete.missingFields, ['depreciation']);
 });
 
+const zeroCorpFields = {
+  ordinaryProfit: 0,
+  laborCosts: 0,
+  interestExpense: 0,
+  rentExpense: 0,
+  leaseExpense: 0,
+  taxesAndDues: 0,
+  depreciation: 0
+};
+
+test('経常利益と青色申告特別控除前所得はマイナスを許容する', () => {
+  assert.equal(core.calculateValueAdded({ entityType: 'corp', values: { ...zeroCorpFields, ordinaryProfit: -100000 } }).status, 'calculated');
+  assert.equal(core.calculateValueAdded({ entityType: 'sole', values: { ...zeroSoleFields, preDeductionProfit: -100000 } }).status, 'calculated');
+});
+
+[
+  ['corp', 'laborCosts', '人件費'],
+  ['sole', 'familyEmployeeWages', '青色事業専従者給与'],
+  ['corp', 'interestExpense', '支払利息'],
+  ['corp', 'rentExpense', '賃借料'],
+  ['corp', 'leaseExpense', 'リース料'],
+  ['corp', 'taxesAndDues', '租税公課'],
+  ['corp', 'depreciation', '減価償却費']
+].forEach(([entityType, key, label]) => {
+  test(`${label}のマイナス値を拒否する`, () => {
+    const base = entityType === 'corp' ? zeroCorpFields : zeroSoleFields;
+    const result = core.calculateValueAdded({ entityType, values: { ...base, [key]: -1 } });
+    assert.equal(result.status, 'invalid');
+    assert.ok(result.invalidFields.includes(key));
+    assert.match(result.message, /0円以上/);
+  });
+});
+
+test('事業主本人の労働対価相当額のマイナス値を拒否する', () => {
+  const result = core.calculateValueAdded({ entityType: 'sole', values: zeroSoleFields, ownerLaborCompensation: -1 });
+  assert.equal(result.status, 'invalid');
+  assert.equal(result.reason, 'invalid_owner_labor_compensation');
+});
+
 test('料金帯の境界前後5％以内で警告する', () => {
   const below = core.findBoundaryWarning('corp', 4750000);
   const above = core.findBoundaryWarning('corp', 5250000);
@@ -257,6 +296,7 @@ test('消費税は現行と同じ四捨五入で計算する', () => {
 });
 
 const costInput = {
+  entityType: 'corp',
   monthlyHours: { playing: 2, manager: 1, executive: 0 },
   annualHours: { playing: 10, manager: 0, executive: 0 },
   softwareItems: [{ id: 'test-software', selected: true, monthlyDirectCost: 1000 }],
@@ -264,22 +304,105 @@ const costInput = {
   targetProfitRate: 30,
   overheadRate: 10,
   softwareMonthlyRevenue: 15000,
-  closingFee: 140000,
-  consumptionTaxReturnFee: 70000,
+  corporateClosingSelected: true,
+  consumptionTaxStatus: 'required',
   yearEndAdjustmentFee: 20000,
   depreciableAssetsFee: 13000,
   otherAnnualSpotRevenue: 17000
 };
 
-test('年間直接原価、必要年間売上、非月次売上、原価下限月額を計算する', () => {
+test('年間直接原価、必要年間売上、月額連動月数、固定年間売上を計算する', () => {
   const result = core.calculateCostFloor(costInput);
   assert.equal(result.status, 'calculated');
   assert.equal(result.monthlyLaborCost, 21000);
   assert.equal(result.annualSpotLaborCost, 60000);
   assert.equal(result.annualDirectCost, 336000);
   assert.equal(result.requiredAnnualRevenue, 560000);
-  assert.equal(result.nonMonthlyRevenue, 440000);
-  assert.equal(result.monthlyCostFloor, 10000);
+  assert.equal(result.linkedRevenueMonths, 18);
+  assert.equal(result.fixedAnnualRevenue, 230000);
+  assert.equal(result.monthlyCostFloor, 18334);
+  assert.ok(result.annualRevenueAtFloor >= result.requiredAnnualRevenue);
+});
+
+const representativeCostInput = {
+  entityType: 'corp',
+  monthlyHours: {},
+  annualHours: {},
+  otherAnnualDirectCost: 1200000,
+  targetProfitRate: 30,
+  overheadRate: 10,
+  corporateClosingSelected: true,
+  soleClosingSelected: false,
+  consumptionTaxStatus: 'required',
+  softwareMonthlyRevenue: 0,
+  yearEndAdjustmentFee: 0,
+  depreciableAssetsFee: 0,
+  otherAnnualSpotRevenue: 0,
+  annualAdjustmentAmount: 0
+};
+
+test('月額連動月数は法人決算・消費税ありで18か月', () => {
+  assert.equal(core.calculateLinkedRevenueMonths(representativeCostInput), 18);
+});
+
+test('月額連動月数は法人決算のみで16か月', () => {
+  assert.equal(core.calculateLinkedRevenueMonths({ ...representativeCostInput, consumptionTaxStatus: 'exempt' }), 16);
+});
+
+test('月額連動月数は月次顧問料のみで12か月', () => {
+  assert.equal(core.calculateLinkedRevenueMonths({ ...representativeCostInput, corporateClosingSelected: false, consumptionTaxStatus: 'exempt' }), 12);
+});
+
+test('法人決算・消費税ありの原価下限は111,112円', () => {
+  const result = core.calculateCostFloor(representativeCostInput);
+  assert.equal(result.requiredAnnualRevenue, 2000000);
+  assert.equal(result.linkedRevenueMonths, 18);
+  assert.equal(result.fixedAnnualRevenue, 0);
+  assert.ok(Math.abs(result.rawMonthlyCostFloor - 111111.11111111111) < 0.0001);
+  assert.equal(result.monthlyCostFloor, 111112);
+  assert.equal(result.annualRevenueAtFloor, 2000016);
+  assert.equal(result.revenueSurplusAtFloor, 16);
+});
+
+test('法人決算のみの原価下限は125,000円', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, consumptionTaxStatus: 'exempt' });
+  assert.equal(result.linkedRevenueMonths, 16);
+  assert.equal(result.monthlyCostFloor, 125000);
+});
+
+test('月次顧問料のみの原価下限は166,667円', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, corporateClosingSelected: false, consumptionTaxStatus: 'exempt' });
+  assert.equal(result.linkedRevenueMonths, 12);
+  assert.equal(result.monthlyCostFloor, 166667);
+});
+
+test('固定年間売上200,000円では原価下限100,000円', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, fixedAnnualRevenue: 200000 });
+  assert.equal(result.monthlyCostFloor, 100000);
+});
+
+test('年間調整額▲50,000円は原価下限を引き上げる', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, annualAdjustmentAmount: -50000 });
+  assert.equal(result.fixedAnnualRevenue, -50000);
+  assert.equal(result.monthlyCostFloor, 113889);
+});
+
+test('決算・消費税報酬の旧固定金額は固定年間売上へ含めない', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, corporateClosingFee: 999999, soleClosingFee: 999999, consumptionTaxReturnFee: 999999 });
+  assert.equal(result.fixedAnnualRevenue, 0);
+  assert.equal(result.monthlyCostFloor, 111112);
+});
+
+test('目標利益率未入力では原価下限を確定しない', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, targetProfitRate: null });
+  assert.equal(result.status, 'manual_required');
+  assert.equal(result.reason, 'target_profit_rate_missing');
+});
+
+test('間接費率未入力では原価下限を確定しない', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, overheadRate: null });
+  assert.equal(result.status, 'manual_required');
+  assert.equal(result.reason, 'overhead_rate_missing');
 });
 
 test('目標利益率と間接費率の合計100％以上は算出不可', () => {
@@ -302,15 +425,29 @@ test('ソフトウェア直接原価未設定では原価下限を確定しな�
 
 test('原価下限の計算結果が負の場合は0円にする', () => {
   const result = core.calculateCostFloor({
+    entityType: 'corp',
     monthlyHours: {},
     annualHours: {},
     otherAnnualDirectCost: 12000,
     targetProfitRate: 0,
     overheadRate: 0,
-    nonMonthlyRevenue: 120000
+    fixedAnnualRevenue: 120000,
+    corporateClosingSelected: false,
+    consumptionTaxStatus: 'exempt'
   });
   assert.equal(result.monthlyCostFloor, 0);
   assert.ok(result.rawMonthlyCostFloor < 0);
+});
+
+test('利益構造は直接原価、間接費、配賦後利益を分けて計算する', () => {
+  const result = core.calculateProfitStructure({ annualRevenue: 2000000, annualDirectCost: 1200000, overheadRate: 10, targetProfitRate: 30 });
+  assert.equal(result.directCostProfit, 800000);
+  assert.equal(result.directCostProfitRate, 0.4);
+  assert.equal(result.allocatedOverhead, 200000);
+  assert.equal(result.postAllocationProfit, 600000);
+  assert.equal(result.postAllocationProfitRate, 0.3);
+  assert.equal(result.targetProfitAmount, 600000);
+  assert.equal(result.differenceFromTargetProfit, 0);
 });
 
 test('推奨報酬は業務内容基準額と原価下限の高い方で、最終額は自動確定しない', () => {
@@ -360,6 +497,23 @@ test('2段階・3段階の均等差額案は編集可能かつ自動確定しな
   assert.equal(three.autoConfirmed, false);
 });
 
+test('所得税加算項目は基本報酬を必要とする', () => {
+  const result = core.validateIncomeTaxBaseRequirement({ selectedItemIds: ['real-estate-income'] });
+  assert.equal(result.valid, false);
+  assert.equal(result.baseId, 'income-basic');
+});
+
+test('所得税加算項目と基本報酬の組合せは有効', () => {
+  const result = core.validateIncomeTaxBaseRequirement({ selectedItemIds: ['income-basic', 'real-estate-transfer'] });
+  assert.equal(result.valid, true);
+});
+
+test('standaloneの年調書類確認のみは基本報酬なしで利用可能', () => {
+  const result = core.validateIncomeTaxBaseRequirement({ selectedItemIds: ['year-end-document-review'] });
+  assert.equal(result.valid, true);
+  assert.equal(result.baseRequired, false);
+});
+
 const validOutput = {
   clientName: '株式会社テスト',
   quoteDate: '2026-08-16',
@@ -371,11 +525,51 @@ const validOutput = {
   consumptionTaxStatus: 'exempt',
   annualTotal: 560000,
   pricingBandStatus: 'calculated',
-  specialServices: []
+  specialServices: [],
+  approvalStatus: 'approved',
+  approvalFingerprint: 'r63-test',
+  currentApprovalFingerprint: 'r63-test'
 };
 
 test('必要項目が揃った外部出力を許可する', () => {
   assert.equal(core.validateExternalOutput(validOutput).allowed, true);
+});
+
+test('所内未承認では外部出力を禁止する', () => {
+  const result = core.validateExternalOutput({ ...validOutput, approvalStatus: 'unapproved', approvalFingerprint: '' });
+  assert.ok(result.errorCodes.includes('approval_required'));
+});
+
+test('承認fingerprint不一致では再承認を要求する', () => {
+  const result = core.validateExternalOutput({ ...validOutput, currentApprovalFingerprint: 'r63-changed' });
+  assert.ok(result.errorCodes.includes('approval_changed'));
+});
+
+test('承認fingerprintはキー順に依存せず、見積内容変更を検出する', () => {
+  const first = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: true, adjustment: 0 } });
+  const reordered = core.calculateApprovalFingerprint({ services: { adjustment: 0, closing: true }, finalMonthlyFee: 35000, clientName: 'A' });
+  const feeChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 37000, services: { closing: true, adjustment: 0 } });
+  const valueChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, valueValues: { ordinaryProfit: 1 } });
+  const serviceChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: false, adjustment: 0 } });
+  const adjustmentChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: true, adjustment: -50000 } });
+  assert.equal(first, reordered);
+  assert.notEqual(first, feeChanged);
+  assert.notEqual(first, valueChanged);
+  assert.notEqual(first, serviceChanged);
+  assert.notEqual(first, adjustmentChanged);
+});
+
+test('所得税加算項目だけの外部出力を禁止する', () => {
+  const result = core.validateExternalOutput({
+    ...validOutput,
+    entityType: 'income',
+    finalMonthlyFee: 0,
+    requiredFilingConfirmed: true,
+    incomeBaseRequirementValid: false,
+    consumptionTaxStatus: undefined,
+    annualTotal: 20000
+  });
+  assert.ok(result.errorCodes.includes('income_base_required'));
 });
 
 [
@@ -442,8 +636,8 @@ test('現行価格、倍率、ソフトウェア請求額を変更していな�
   assert.deepEqual(config.services.software.slice(0, 3).map((item) => item.monthlyDirectCost), [null, null, null]);
 });
 
-test('付加価値図解追加後も価格表版はr6.0を維持する', () => {
-  assert.equal(config.appVersion, 'r6.2');
+test('r6.3改修後も価格表版はr6.0を維持する', () => {
+  assert.equal(config.appVersion, 'r6.3');
   assert.equal(config.priceMaster.priceTableVersion, 'r6.0');
 });
 
@@ -478,9 +672,11 @@ try {
 }
 
 try {
-  const [htmlSource, appSource] = await Promise.all([
+  const [htmlSource, appSource, configSource, coreSource] = await Promise.all([
     readFile(join(repositoryRoot, 'index.html'), 'utf8'),
-    readFile(join(repositoryRoot, 'app.js'), 'utf8')
+    readFile(join(repositoryRoot, 'app.js'), 'utf8'),
+    readFile(join(repositoryRoot, 'pricing-config.js'), 'utf8'),
+    readFile(join(repositoryRoot, 'pricing-core.js'), 'utf8')
   ]);
   assert.doesNotMatch(htmlSource, />見込客と確認</);
   assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
@@ -490,6 +686,12 @@ try {
   assert.match(htmlSource, /id="value-diagram-terms"/);
   assert.match(htmlSource, /id="value-diagram-annualized"/);
   assert.match(htmlSource, /id="adopt-diagram-standard"/);
+  assert.match(htmlSource, /参考月額として反映/);
+  assert.match(htmlSource, /id="prospect-approval-label"/);
+  assert.match(htmlSource, /id="approval-section"/);
+  assert.match(htmlSource, /id="internal-confirm-dialog"/);
+  assert.match(htmlSource, /id="recovery-dialog"/);
+  assert.match(htmlSource, /id="new-quote-button"/);
   assert.match(htmlSource, /class="metric-grid internal-mode-only"/);
   assert.match(htmlSource, /<details class="internal-mode-only">/);
   assert.match(htmlSource, /class="card internal-mode-only" id="cost-section"/);
@@ -500,14 +702,30 @@ try {
   assert.match(appSource, /merged\.interactionMode = 'prospect'/);
   assert.match(appSource, /function renderValueDiagram\(/);
   assert.match(appSource, /function adoptStandardFee\(/);
+  assert.match(appSource, /function buildApprovalSnapshot\(/);
+  assert.match(appSource, /function invalidateApprovalIfChanged\(/);
+  assert.match(appSource, /function approveCurrentQuote\(/);
+  assert.match(appSource, /function requestInternalMode\(/);
+  assert.match(appSource, /startInternalIdleTimer/);
+  assert.match(appSource, /sessionStorage\.setItem\(config\.storageKeys\.sessionQuote/);
+  assert.match(appSource, /localStorage\.setItem\(config\.storageKeys\.preferences/);
+  assert.doesNotMatch(appSource, /localStorage\.setItem\(config\.storageKeys\.state/);
+  assert.match(appSource, /definition\.requiresBase === true/);
+  assert.match(configSource, /pricingRole: 'base'/);
+  assert.match(configSource, /pricingRole: 'standalone'/);
+  assert.match(configSource, /allowNegative: false/);
+  assert.match(coreSource, /function calculateLinkedRevenueMonths\(/);
+  assert.match(coreSource, /function calculateFixedAnnualRevenue\(/);
+  assert.match(coreSource, /function calculateProfitStructure\(/);
+  assert.match(coreSource, /approvalStatus !== 'approved'/);
   assert.match(appSource, /function renderProspectSummary\(/);
   assert.match(appSource, /config\.multipliers\.corporateClosing/);
   assert.match(appSource, /config\.multipliers\.consumptionTaxReturn/);
-  console.log('✓ 見込客向け既定表示、付加価値図解及び社内情報の表示分離を実装している');
+  console.log('✓ r6.3の見込客表示、所内承認、保存分離及び誤表示防止を実装している');
   passed += 1;
 } catch (error) {
-  failures.push({ name: '見込客向け既定表示と付加価値図解のソース検査', error });
-  console.error('✗ 見込客向け既定表示と付加価値図解のソース検査');
+  failures.push({ name: 'r6.3 UI・承認・保存分離のソース検査', error });
+  console.error('✗ r6.3 UI・承認・保存分離のソース検査');
   console.error(error.stack || error.message || error);
 }
 

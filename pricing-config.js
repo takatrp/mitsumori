@@ -53,6 +53,8 @@
       key: 'laborCosts',
       label: '人件費',
       required: true,
+      allowNegative: false,
+      minimum: 0,
       help: '役員報酬、給与、賞与、法定福利費及び福利厚生費を含めるかは、確定した所内方針に従ってください。現在は所内定義の設定が必要です。',
       scopeStatus: 'internal_policy_required'
     },
@@ -60,6 +62,8 @@
       key: 'interestExpense',
       label: '支払利息',
       required: true,
+      allowNegative: false,
+      minimum: 0,
       help: '割引料その他を含めるかは、確定した所内方針に従ってください。現在は所内定義の設定が必要です。',
       scopeStatus: 'internal_policy_required'
     },
@@ -67,16 +71,20 @@
       key: 'rentExpense',
       label: '賃借料',
       required: true,
+      allowNegative: false,
+      minimum: 0,
       help: 'リース料との二重計上を避けてください。'
     },
     {
       key: 'leaseExpense',
       label: 'リース料',
       required: true,
+      allowNegative: false,
+      minimum: 0,
       help: '賃借料との二重計上を避けてください。'
     },
-    { key: 'taxesAndDues', label: '租税公課', required: true },
-    { key: 'depreciation', label: '減価償却費', required: true }
+    { key: 'taxesAndDues', label: '租税公課', required: true, allowNegative: false, minimum: 0 },
+    { key: 'depreciation', label: '減価償却費', required: true, allowNegative: false, minimum: 0 }
   ];
 
   const valueAddedFields = {
@@ -85,6 +93,8 @@
         key: 'ordinaryProfit',
         label: '経常利益',
         required: true,
+        allowNegative: true,
+        minimum: null,
         help: '臨時的な営業外損益等により大きく変動する場合は、直近1期だけでなく複数期平均の検討が必要です。'
       }
     ].concat(commonValueAddedFields),
@@ -93,9 +103,11 @@
         key: 'preDeductionProfit',
         label: '青色申告特別控除前の所得金額',
         required: true,
+        allowNegative: true,
+        minimum: null,
         help: '臨時的な損益等により大きく変動する場合は、直近1期だけでなく複数期平均の検討が必要です。'
       },
-      { key: 'familyEmployeeWages', label: '青色事業専従者給与', required: true }
+      { key: 'familyEmployeeWages', label: '青色事業専従者給与', required: true, allowNegative: false, minimum: 0 }
     ].concat(commonValueAddedFields)
   };
 
@@ -107,22 +119,22 @@
   ];
 
   const incomeTaxReturnItems = [
-    { id: 'income-basic', name: '所得税確定申告 基本報酬', kind: 'spot', price: 30000, note: '給与・年金・医療費・寄附金控除等の一般申告' },
-    { id: 'real-estate-income', name: '不動産所得加算', kind: 'spot', price: 20000, note: '収支内訳書又は青色申告決算書の作成を要するもの' },
-    { id: 'additional-property', name: '物件数加算（2件目以降）', kind: 'per_quantity', price: 5000, note: '賃貸物件・駐車場等が複数ある場合（5,000円／件）' },
-    { id: 'depreciation-loan-review', name: '減価償却・借入金確認加算', kind: 'spot', price: 5000, note: '減価償却資産明細、借入金利子、修繕費等の確認を要する場合' },
-    { id: 'stock-transfer', name: '株式譲渡加算', kind: 'spot', price: 20000, note: '上場株式等の譲渡所得計算を要する場合' },
-    { id: 'real-estate-transfer', name: '土地建物等譲渡所得加算', kind: 'spot', price: 50000, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '取得費・譲渡費用・特例判定等を要するもの（50,000円〜）' },
-    { id: 'inherited-property-special-rule', name: '相続財産取得費加算の特例加算', kind: 'spot', price: 30000, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '相続財産を譲渡した場合の取得費加算の特例（30,000円〜）' },
-    { id: 'first-year-engagement', name: '初年度受託加算', kind: 'spot', price: 10000, note: '資料整理・前提確認に手間を要する場合' },
-    { id: 'blue-return-application', name: '青色申告承認申請書提出', kind: 'spot', price: 5000, note: '新規に青色申告承認申請書を提出する場合' },
-    { id: 'housing-loan-first-year', name: '住宅ローン控除（初年度）', kind: 'spot', price: 20000, note: '通常の初年度申告。計算明細書・残高証明書等の確認を含む' },
-    { id: 'housing-loan-certified', name: '住宅ローン控除（初年度・認定住宅等）', kind: 'spot', price: 25000, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '認定住宅、補助金確認、添付資料が多い場合（25,000〜30,000円）' },
-    { id: 'housing-loan-later', name: '住宅ローン控除（2年目以降）', kind: 'spot', price: 5000, editable: true, note: '年末調整で処理できない場合の確定申告対応（5,000〜10,000円）' },
-    { id: 'year-end-document-review', name: '年調書類確認のみ', kind: 'spot', price: 3000, editable: true, note: '申告作成を伴わない軽微対応（3,000〜5,000円）' },
-    { id: 'simultaneous-engagement-adjustment', name: '同時受託調整', kind: 'spot', price: -5000, editable: true, note: '夫婦・親族等で同時受託する場合の配慮（▲5,000〜▲10,000円）' },
-    { id: 'organized-material-adjustment', name: '資料整理済み調整', kind: 'spot', price: -5000, note: 'Excel等で収入・経費が整理済みで確認中心の場合（▲5,000円）' },
-    { id: 'material-deficiency', name: '資料不備・再整理対応加算', kind: 'spot', price: 5000, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '資料不足、再集計、問い合わせ往復が多い場合（5,000〜10,000円）' }
+    { id: 'income-basic', name: '所得税確定申告 基本報酬', kind: 'spot', price: 30000, pricingRole: 'base', requiresBase: false, note: '給与・年金・医療費・寄附金控除等の一般申告' },
+    { id: 'real-estate-income', name: '不動産所得加算', kind: 'spot', price: 20000, pricingRole: 'addon', requiresBase: true, note: '収支内訳書又は青色申告決算書の作成を要するもの' },
+    { id: 'additional-property', name: '物件数加算（2件目以降）', kind: 'per_quantity', price: 5000, pricingRole: 'addon', requiresBase: true, note: '賃貸物件・駐車場等が複数ある場合（5,000円／件）' },
+    { id: 'depreciation-loan-review', name: '減価償却・借入金確認加算', kind: 'spot', price: 5000, pricingRole: 'addon', requiresBase: true, note: '減価償却資産明細、借入金利子、修繕費等の確認を要する場合' },
+    { id: 'stock-transfer', name: '株式譲渡加算', kind: 'spot', price: 20000, pricingRole: 'addon', requiresBase: true, note: '上場株式等の譲渡所得計算を要する場合' },
+    { id: 'real-estate-transfer', name: '土地建物等譲渡所得加算', kind: 'spot', price: 50000, pricingRole: 'addon', requiresBase: true, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '取得費・譲渡費用・特例判定等を要するもの（50,000円〜）' },
+    { id: 'inherited-property-special-rule', name: '相続財産取得費加算の特例加算', kind: 'spot', price: 30000, pricingRole: 'addon', requiresBase: true, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '相続財産を譲渡した場合の取得費加算の特例（30,000円〜）' },
+    { id: 'first-year-engagement', name: '初年度受託加算', kind: 'spot', price: 10000, pricingRole: 'addon', requiresBase: true, note: '資料整理・前提確認に手間を要する場合' },
+    { id: 'blue-return-application', name: '青色申告承認申請書提出', kind: 'spot', price: 5000, pricingRole: 'addon', requiresBase: true, note: '新規に青色申告承認申請書を提出する場合' },
+    { id: 'housing-loan-first-year', name: '住宅ローン控除（初年度）', kind: 'spot', price: 20000, pricingRole: 'addon', requiresBase: true, note: '通常の初年度申告。計算明細書・残高証明書等の確認を含む' },
+    { id: 'housing-loan-certified', name: '住宅ローン控除（初年度・認定住宅等）', kind: 'spot', price: 25000, pricingRole: 'addon', requiresBase: true, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '認定住宅、補助金確認、添付資料が多い場合（25,000〜30,000円）' },
+    { id: 'housing-loan-later', name: '住宅ローン控除（2年目以降）', kind: 'spot', price: 5000, pricingRole: 'addon', requiresBase: true, editable: true, note: '年末調整で処理できない場合の確定申告対応（5,000〜10,000円）' },
+    { id: 'year-end-document-review', name: '年調書類確認のみ', kind: 'spot', price: 3000, pricingRole: 'standalone', requiresBase: false, editable: true, note: '申告作成を伴わない軽微対応（3,000〜5,000円）' },
+    { id: 'simultaneous-engagement-adjustment', name: '同時受託調整', kind: 'spot', price: -5000, pricingRole: 'adjustment', requiresBase: true, editable: true, note: '夫婦・親族等で同時受託する場合の配慮（▲5,000〜▲10,000円）' },
+    { id: 'organized-material-adjustment', name: '資料整理済み調整', kind: 'spot', price: -5000, pricingRole: 'adjustment', requiresBase: true, note: 'Excel等で収入・経費が整理済みで確認中心の場合（▲5,000円）' },
+    { id: 'material-deficiency', name: '資料不備・再整理対応加算', kind: 'spot', price: 5000, pricingRole: 'addon', requiresBase: true, minimumPrice: true, priceConfirmationRequired: true, editable: true, note: '資料不足、再集計、問い合わせ往復が多い場合（5,000〜10,000円）' }
   ];
 
   const adjustmentCategoryDefinitions = {
@@ -149,6 +161,9 @@
   });
 
   const storageKeys = {
+    sessionQuote: 'mk_mitsumori_session_quote',
+    restoreOnce: 'mk_mitsumori_restore_once',
+    preferences: 'mk_mitsumori_preferences',
     legacyEntity: 'mk_ent',
     legacyCostState: 'mk_cost_state',
     state: 'mk_mitsumori_state',
@@ -174,7 +189,7 @@
   };
 
   return deepFreeze({
-    appVersion: 'r6.2',
+    appVersion: 'r6.3',
     taxRate: 0.10,
     priceMaster: priceMaster,
     priceTableVersion: priceMaster.priceTableVersion,
@@ -193,8 +208,13 @@
     ownerLaborCompensationSettings: {
       label: '事業主本人の労働対価相当額',
       description: '個人事業者について、法人の役員報酬に相当する事業主本人の労働対価を報酬算定上加算します。',
-      editable: true
+      editable: true,
+      allowNegative: false,
+      minimum: 0
     },
+    internalModeTimeoutMinutes: 15,
+    internalAccessConfirmationCode: '',
+    internalDisplayConfirmationPhrase: '所内詳細を表示',
     standardCostRates: {
       playing: 6000,
       manager: 9000,
