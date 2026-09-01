@@ -651,9 +651,13 @@ test('現行価格、倍率、ソフトウェア請求額を変更していな�
   assert.deepEqual(config.services.software.slice(0, 3).map((item) => item.monthlyDirectCost), [null, null, null]);
 });
 
-test('r6.4改修後も価格表版はr6.0を維持する', () => {
-  assert.equal(config.appVersion, 'r6.4');
+test('r6.3へ戻した後も価格表版はr6.0を維持する', () => {
+  assert.equal(config.appVersion, 'r6.3');
   assert.equal(config.priceMaster.priceTableVersion, 'r6.0');
+});
+
+test('所長印刷パスワードを指定値に設定する', () => {
+  assert.equal(config.principalPrintPassword, 'Taka1979');
 });
 
 test('localStorage.clear()を使用していない', () => {
@@ -697,7 +701,11 @@ try {
   assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
   assert.match(htmlSource, /id="internal-mode-toggle"/);
   assert.match(htmlSource, /id="principal-mode-toggle"/);
-  assert.match(htmlSource, /所長入力・即時出力/);
+  assert.match(htmlSource, />所長入力モード</);
+  assert.match(htmlSource, /id="principal-print-dialog"/);
+  assert.match(htmlSource, /id="principal-print-password" type="password" autocomplete="off"/);
+  assert.match(htmlSource, /body\.mode-principal \.internal-mode-only \{ display:none!important; \}/);
+  assert.doesNotMatch(htmlSource, /body\.mode-principal #approval-section/);
   assert.match(htmlSource, /id="prospect-summary"/);
   assert.match(htmlSource, /<section class="card" id="value-section">/);
   assert.match(htmlSource, /id="value-diagram-terms"/);
@@ -718,8 +726,23 @@ try {
   assert.match(appSource, /interactionMode: 'prospect'/);
   assert.match(appSource, /merged\.interactionMode = 'prospect'/);
   assert.match(appSource, /\['internal', 'principal', 'prospect'\]/);
-  assert.match(appSource, /function isPrincipalDirectMode\(/);
-  assert.match(appSource, /ignoreApproval: isPrincipalDirectMode\(\)/);
+  assert.match(appSource, /function isPrincipalInputMode\(/);
+  assert.match(appSource, /const detailsVisible = internal;/);
+  assert.match(appSource, /function buildPrincipalPrintValidation\(/);
+  assert.match(appSource, /'cost_floor_exception_missing', 'exception_reason_missing'/);
+  assert.match(appSource, /function requestPrincipalPrint\(/);
+  assert.match(appSource, /function confirmPrincipalPrint\(/);
+  assert.match(appSource, /\$\('principal-print-password'\)\.value !== config\.principalPrintPassword/);
+  assert.match(appSource, /else setInteractionMode\('principal'\)/);
+  assert.doesNotMatch(appSource, /requestInternalMode\('principal'\)/);
+  assert.match(appSource, /principalPrintAuthorizationFingerprint = currentApprovalFingerprint\(\)/);
+  assert.match(appSource, /principalPrintAuthorizationFingerprint = '';/);
+  assert.match(appSource, /isPrincipalPrintAuthorized\(\) \? buildPrincipalPrintValidation\(\) : buildValidation\(\)/);
+  assert.match(appSource, /setTimeout\(\(\) => clearPrincipalPrintAuthorization\(true\), 60000\)/);
+  assert.match(appSource, /function handleAfterPrint\(\) \{\s+clearPrincipalPrintAuthorization\(true\)/);
+  assert.match(appSource, /\$\('principal-print-password'\)\.value = '';/);
+  assert.match(appSource, /config\.principalPrintPassword/);
+  assert.doesNotMatch(appSource, /ignoreApproval: isPrincipalInputMode\(\)/);
   assert.match(appSource, /function formatMoneyInputRealtime\(/);
   assert.match(appSource, /addEventListener\('input', formatMoneyInputRealtime, true\)/);
   assert.match(appSource, /function renderValueDiagram\(/);
@@ -744,11 +767,11 @@ try {
   assert.match(appSource, /function renderProspectSummary\(/);
   assert.match(appSource, /config\.multipliers\.corporateClosing/);
   assert.match(appSource, /config\.multipliers\.consumptionTaxReturn/);
-  console.log('✓ r6.4の所長即時出力、リアルタイム金額表示、所内承認及び保存分離を実装している');
+  console.log('✓ r6.3の通常画面ベース所長入力、印刷時パスワード、リアルタイム金額表示及び所内承認分離を実装している');
   passed += 1;
 } catch (error) {
-  failures.push({ name: 'r6.4 UI・即時出力・承認・保存分離のソース検査', error });
-  console.error('✗ r6.4 UI・即時出力・承認・保存分離のソース検査');
+  failures.push({ name: 'r6.3 UI・所長印刷解除・承認・保存分離のソース検査', error });
+  console.error('✗ r6.3 UI・所長印刷解除・承認・保存分離のソース検査');
   console.error(error.stack || error.message || error);
 }
 

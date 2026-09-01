@@ -11,7 +11,7 @@
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
   const interactionModeDescriptions = {
     internal: '所内で標準報酬、原価、利益率まで確認しています。「見込客画面に戻る」を押すと対面用の画面へ戻ります。',
-    principal: '所長が入力から確認、印刷・PDFまで一人で完結するモードです。所内承認の操作だけを省略し、その他の出力前チェックは維持します。',
+    principal: '見込客向けの通常画面で金額を一緒に確認し、印刷・PDF時だけ所長パスワードで承認を代替するモードです。社内原価・利益率は表示しません。',
     prospect: '見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。'
   };
   const defaultActionModeNote = '顧客向け出力には社内原価・利益率・例外理由を含めません。';
@@ -243,6 +243,9 @@
   let state = loadState();
   let model = {};
   let initializing = true;
+  let principalPrintAuthorizationFingerprint = '';
+  let principalPrintAuthorizationTimer = null;
+  let pendingPrincipalPrint = null;
 
   function saveState() {
     if (initializing || pendingRecovery) return;
@@ -329,8 +332,21 @@
     return core.calculateApprovalFingerprint(buildApprovalSnapshot());
   }
 
-  function isPrincipalDirectMode() {
+  function isPrincipalInputMode() {
     return state.interactionMode === 'principal';
+  }
+
+  function isPrincipalPrintAuthorized() {
+    return isPrincipalInputMode()
+      && principalPrintAuthorizationFingerprint !== ''
+      && principalPrintAuthorizationFingerprint === currentApprovalFingerprint();
+  }
+
+  function clearPrincipalPrintAuthorization(shouldRender) {
+    principalPrintAuthorizationFingerprint = '';
+    if (principalPrintAuthorizationTimer) window.clearTimeout(principalPrintAuthorizationTimer);
+    principalPrintAuthorizationTimer = null;
+    if (shouldRender === true) renderPrintDocuments();
   }
 
   function invalidateApprovalIfChanged() {
@@ -357,18 +373,11 @@
   }
 
   function handleInternalActivity() {
-    if (state.interactionMode === 'internal' || state.interactionMode === 'principal') startInternalIdleTimer();
+    if (state.interactionMode === 'internal') startInternalIdleTimer();
   }
 
   // 静的サイト上のアクセス制御ではなく、対面中に所内情報を誤表示しないための確認手順。
-  let requestedDetailMode = 'internal';
-  function requestInternalMode(mode) {
-    requestedDetailMode = mode === 'principal' ? 'principal' : 'internal';
-    const principal = requestedDetailMode === 'principal';
-    $('internal-confirm-dialog-title').textContent = principal ? '所長入力・即時出力モードへ切り替えます' : '所内詳細を表示します';
-    $('internal-confirm-message').innerHTML = principal
-      ? '所内原価、利益率、例外理由等を表示し、所内承認の操作を省略して出力できるモードです。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。'
-      : '所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。';
+  function requestInternalMode() {
     $('internal-confirm-input').value = '';
     $('internal-confirm-error').classList.add('hidden');
     $('internal-confirm-dialog').showModal();
@@ -384,7 +393,7 @@
       return;
     }
     $('internal-confirm-dialog').close();
-    setInteractionMode(requestedDetailMode);
+    setInteractionMode('internal');
   }
 
   function currentConsumptionTaxStatus() {
@@ -399,6 +408,7 @@
 
   function setInteractionMode(mode, shouldRecalculate) {
     if (!['internal', 'principal', 'prospect'].includes(mode)) return;
+    if (mode !== 'principal') clearPrincipalPrintAuthorization(false);
     state.interactionMode = mode;
     document.body.classList.remove('mode-internal', 'mode-principal', 'mode-prospect');
     document.body.classList.add('mode-' + mode);
@@ -406,27 +416,27 @@
     const principalModeButton = $('principal-mode-toggle');
     const internal = mode === 'internal';
     const principal = mode === 'principal';
-    const detailsVisible = internal || principal;
+    const detailsVisible = internal;
     internalModeButton.classList.toggle('mode-active', internal);
     internalModeButton.setAttribute('aria-pressed', String(internal));
     internalModeButton.textContent = internal ? '見込客画面に戻る' : '所内詳細';
     principalModeButton.classList.toggle('mode-active', principal);
     principalModeButton.setAttribute('aria-pressed', String(principal));
-    principalModeButton.textContent = principal ? '見込客画面に戻る' : '所長入力・即時出力';
+    principalModeButton.textContent = principal ? 'ノーマルモードに戻る' : '所長入力モード';
     $('mode-description').textContent = interactionModeDescriptions[mode];
     $('principal-mode-banner').classList.toggle('hidden', !principal);
     $('value-section-title').textContent = detailsVisible ? '1. 松本会計報酬算定上の付加価値額' : '付加価値算定プロセス';
-    $('value-section-pill').textContent = principal ? '入力しながら金額を積み上げ' : (internal ? '料金帯判定は12か月換算値' : '計算過程をその場で確認');
+    $('value-section-pill').textContent = internal ? '料金帯判定は12か月換算値' : '計算過程をその場で確認';
     $('band-table-summary').textContent = detailsVisible ? '現行の所内標準価格表を確認' : '標準報酬の区分を確認';
-    $('service-section-title').textContent = mode === 'prospect' ? 'お見積り内容の確認' : '3. 受託業務・サービス';
-    $('service-section-pill').textContent = principal ? '入力内容を即時集計' : (mode === 'prospect' ? '選択内容を即時反映' : '既存価格を維持');
+    $('service-section-title').textContent = internal ? '3. 受託業務・サービス' : 'お見積り内容の確認';
+    $('service-section-pill').textContent = internal ? '既存価格を維持' : '選択内容を即時反映';
     $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + (detailsVisible ? '（実際の所内業務範囲は設定で編集）' : '');
-    $('action-mode-note').textContent = principal ? '所長入力モード：承認操作を省略し、その他の必須チェック完了後に出力できます。' : defaultActionModeNote;
-    if (mode === 'prospect' && state.document.outputType !== 'customer-only') {
+    $('action-mode-note').textContent = principal ? '所長入力モード：印刷／PDFボタンを押した後、所長パスワードで出力を解除します。' : defaultActionModeNote;
+    if (!internal && state.document.outputType !== 'customer-only') {
       state.document.outputType = 'customer-only';
       $('output-type').value = 'customer-only';
     }
-    if (detailsVisible) {
+    if (internal) {
       $('mode-notice').textContent = '';
       startInternalIdleTimer();
     } else {
@@ -435,7 +445,7 @@
       state.previewVisible = false;
       if (shouldRecalculate !== false) {
         $('interaction-mode-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        $('internal-mode-toggle').focus();
+        (principal ? principalModeButton : internalModeButton).focus();
       }
     }
     applyOutputMode(state.document.outputType);
@@ -863,7 +873,7 @@
   }
 
   function buildValidation(options) {
-    const settings = Object.assign({ ignoreApproval: isPrincipalDirectMode() }, options || {});
+    const settings = Object.assign({ ignoreApproval: false }, options || {});
     const specialServices = config.services.incomeTaxReturn.filter((definition) => definition.priceConfirmationRequired).map((definition) => {
       const item = state.services.income[definition.id];
       return { selected: state.entity === 'income' && item.selected, priceConfirmationRequired: true, priceConfirmed: item.priceConfirmed };
@@ -922,6 +932,13 @@
     });
     if (state.services.otherSpotSelected && !String(state.services.otherSpotName || '').trim()) add('other_spot_name_missing', '選択したその他年次・スポット業務の名称を入力してください。');
     if (state.services.otherSpotSelected && (!Number.isFinite(state.services.otherSpotFee) || state.services.otherSpotFee <= 0)) add('other_spot_fee_invalid', '選択したその他年次・スポット業務の報酬額を入力してください。');
+    return { allowed: errors.length === 0, errors };
+  }
+
+  function buildPrincipalPrintValidation() {
+    const validation = buildValidation({ ignoreApproval: true });
+    const principalDecisionCodes = new Set(['cost_floor_exception_missing', 'exception_reason_missing']);
+    const errors = validation.errors.filter((error) => !principalDecisionCodes.has(error.code));
     return { allowed: errors.length === 0, errors };
   }
 
@@ -1112,10 +1129,10 @@
 
   function renderProspectSummary() {
     const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
-    const principal = isPrincipalDirectMode();
-    const principalReady = principal && buildValidation().allowed;
+    const principal = isPrincipalInputMode();
+    const principalReady = principal && buildPrincipalPrintValidation().allowed;
     $('prospect-approval-label').textContent = principal
-      ? (principalReady ? '所長確認・即時出力可能' : '入力中・出力前チェック未完了')
+      ? (principalReady ? '印刷時に所長パスワード確認' : '入力中・出力前チェック未完了')
       : (approved ? '所内承認済み' : '参考表示・所内未承認');
     $('prospect-approval-label').classList.toggle('ok', approved || principalReady);
     const fee = state.decision.finalMonthlyFee;
@@ -1158,10 +1175,9 @@
     $('print-scope').textContent = state.document.scope || '';
     $('print-notes').textContent = state.document.notes || '';
     const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
-    const principal = isPrincipalDirectMode();
-    const principalReady = principal && buildValidation().allowed;
-    $('print-approval-label').textContent = principal ? '入力中・出力前チェック未完了' : (approved ? '' : '参考表示・所内未承認');
-    $('print-approval-label').classList.toggle('hidden', approved || principalReady);
+    const principalAuthorized = isPrincipalPrintAuthorized();
+    $('print-approval-label').textContent = isPrincipalInputMode() ? '印刷前・所長パスワード未確認' : (approved ? '' : '参考表示・所内未承認');
+    $('print-approval-label').classList.toggle('hidden', approved || principalAuthorized);
     $('print-total').textContent = estimate && estimate.status === 'calculated' ? yen(estimate.total) + '（税込）' : '未確定';
     $('quote-rows').innerHTML = quoteLines().map((line) => '<tr><td>' + escapeHtml(line.name) + '</td><td>' + escapeHtml(line.unit) + '</td><td>' + escapeHtml(line.quantity) + '</td><td class="money">' + yen(line.annual) + '</td></tr>').join('') || '<tr><td colspan="4" class="empty-state">見積項目がありません</td></tr>';
     $('quote-totals').innerHTML = estimate && estimate.status === 'calculated' ? '<tr><th>小計</th><td class="money">' + yen(estimate.subtotal) + '</td></tr><tr><th>消費税 ' + (config.taxRate * 100) + '%</th><td class="money">' + yen(estimate.consumptionTax) + '</td></tr><tr><th>税込合計</th><td class="money"><b>' + yen(estimate.total) + '</b></td></tr>' : '';
@@ -1283,15 +1299,21 @@
   }
 
   function renderValidation() {
-    const validation = buildValidation();
-    const principal = isPrincipalDirectMode();
+    const standardValidation = buildValidation();
+    const principal = isPrincipalInputMode();
+    const validation = principal ? buildPrincipalPrintValidation() : standardValidation;
     model.validation = validation;
-    $('validation-count').textContent = validation.allowed ? (principal ? '即時出力可能' : '出力可能') : validation.errors.length + '件の確認事項';
+    $('validation-count').textContent = validation.allowed ? (principal ? '所長確認後に出力可能' : '出力可能') : validation.errors.length + '件の確認事項';
     $('validation-errors').innerHTML = validation.allowed
-      ? alertHtml(principal ? '所長入力モードの出力前チェックを満たしています。承認操作なしで印刷／PDFへ進めます。' : '顧客向け出力の必須チェックを満たしています。', 'ok')
+      ? alertHtml(principal ? '出力前チェックを満たしています。顧客向け印刷／PDFボタンを押し、所長パスワードを入力してください。' : '顧客向け出力の必須チェックを満たしています。', 'ok')
       : validation.errors.map((error) => alertHtml(error.message, 'danger')).join('');
+    if (principal) {
+      $('action-mode-note').textContent = validation.allowed
+        ? '所長入力モード：印刷／PDFボタンを押した後、所長パスワードで出力を解除します。'
+        : '所長入力モード：' + validation.errors[0].message;
+    }
     $('customer-print-button').disabled = !validation.allowed;
-    $('internal-print-button').disabled = !validation.allowed;
+    $('internal-print-button').disabled = !standardValidation.allowed;
   }
 
   function applyOutputMode(mode) {
@@ -1315,11 +1337,12 @@
     $('print-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  function printDocument(internal) {
+  function performPrint(internal, ignoreApproval) {
     model = calculateAll();
     renderCalculations();
-    const validation = buildValidation();
+    const validation = ignoreApproval === true ? buildPrincipalPrintValidation() : buildValidation();
     if (!validation.allowed) {
+      if (ignoreApproval === true) clearPrincipalPrintAuthorization(true);
       window.alert('正式な出力を実行できません。\n\n' + validation.errors.map((error) => '・' + error.message).join('\n'));
       return;
     }
@@ -1337,18 +1360,74 @@
     applyOutputMode(state.document.outputType);
     renderPrintDocuments();
     saveState();
-    window.print();
+    if (ignoreApproval === true) {
+      if (principalPrintAuthorizationTimer) window.clearTimeout(principalPrintAuthorizationTimer);
+      principalPrintAuthorizationTimer = window.setTimeout(() => clearPrincipalPrintAuthorization(true), 60000);
+    }
+    try {
+      window.print();
+    } catch (error) {
+      if (ignoreApproval === true) clearPrincipalPrintAuthorization(true);
+      window.alert('印刷／PDF画面を開けませんでした。ブラウザーの印刷機能を確認してください。');
+    }
+  }
+
+  function requestPrincipalPrint() {
+    model = calculateAll();
+    renderCalculations();
+    const validation = buildPrincipalPrintValidation();
+    if (!validation.allowed) {
+      window.alert('正式な出力を実行できません。\n\n' + validation.errors.map((error) => '・' + error.message).join('\n'));
+      return;
+    }
+    pendingPrincipalPrint = { internal: false };
+    $('principal-print-password').value = '';
+    $('principal-print-error').classList.add('hidden');
+    $('principal-print-dialog').showModal();
+    $('principal-print-password').focus();
+  }
+
+  function confirmPrincipalPrint() {
+    if (!pendingPrincipalPrint) return;
+    if ($('principal-print-password').value !== config.principalPrintPassword) {
+      $('principal-print-error').textContent = '所長パスワードが一致しません。';
+      $('principal-print-error').classList.remove('hidden');
+      $('principal-print-password').select();
+      return;
+    }
+    const request = pendingPrincipalPrint;
+    pendingPrincipalPrint = null;
+    $('principal-print-password').value = '';
+    $('principal-print-dialog').close();
+    principalPrintAuthorizationFingerprint = currentApprovalFingerprint();
+    performPrint(request.internal, true);
+  }
+
+  function cancelPrincipalPrint() {
+    pendingPrincipalPrint = null;
+    $('principal-print-password').value = '';
+    $('principal-print-error').classList.add('hidden');
+    $('principal-print-dialog').close();
+  }
+
+  function printDocument(internal) {
+    if (isPrincipalInputMode() && !internal) {
+      requestPrincipalPrint();
+      return;
+    }
+    performPrint(internal, false);
   }
 
   function handleBeforePrint() {
     model = calculateAll();
     renderPrintDocuments();
-    const blocked = !buildValidation().allowed;
+    const blocked = !(isPrincipalPrintAuthorized() ? buildPrincipalPrintValidation() : buildValidation()).allowed;
     $('print-area').classList.toggle('print-blocked', blocked);
     if (!blocked) $('print-area').classList.remove('hidden');
   }
 
   function handleAfterPrint() {
+    clearPrincipalPrintAuthorization(true);
     $('print-area').classList.remove('print-blocked');
     if (!state.previewVisible) $('print-area').classList.add('hidden');
   }
@@ -1416,11 +1495,11 @@
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
     $('internal-mode-toggle').addEventListener('click', () => {
       if (state.interactionMode === 'internal') setInteractionMode('prospect');
-      else requestInternalMode('internal');
+      else requestInternalMode();
     });
     $('principal-mode-toggle').addEventListener('click', () => {
       if (state.interactionMode === 'principal') setInteractionMode('prospect');
-      else requestInternalMode('principal');
+      else setInteractionMode('principal');
     });
     setDocumentFields();
     $('period-months').value = state.fiscalMonths;
@@ -1486,7 +1565,7 @@
       state.preferences.internalModeTimeoutMinutes = Math.max(1, Math.floor(numberOrZero($('internal-timeout-minutes').value) || config.internalModeTimeoutMinutes));
       $('internal-timeout-minutes').value = state.preferences.internalModeTimeoutMinutes;
       saveState();
-      if (state.interactionMode === 'internal' || state.interactionMode === 'principal') startInternalIdleTimer();
+      if (state.interactionMode === 'internal') startInternalIdleTimer();
     });
     const comparisonMoneyFields = {
       'current-monthly-fee': 'currentMonthlyFee', 'current-closing-fee': 'currentClosingFee', 'current-consumption-fee': 'currentConsumptionTaxFee', 'current-annual-fee': 'currentAnnualFee'
@@ -1516,6 +1595,10 @@
     $('internal-confirm-submit').addEventListener('click', confirmInternalMode);
     $('internal-confirm-cancel').addEventListener('click', () => $('internal-confirm-dialog').close());
     $('internal-confirm-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); confirmInternalMode(); } });
+    $('principal-print-submit').addEventListener('click', confirmPrincipalPrint);
+    $('principal-print-cancel').addEventListener('click', cancelPrincipalPrint);
+    $('principal-print-password').addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); confirmPrincipalPrint(); } });
+    $('principal-print-dialog').addEventListener('cancel', (event) => { event.preventDefault(); cancelPrincipalPrint(); });
     $('recovery-restore').addEventListener('click', restorePendingDraft);
     $('recovery-new').addEventListener('click', discardPendingDraft);
     $('new-quote-button').addEventListener('click', startNewQuote);

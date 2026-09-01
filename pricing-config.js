@@ -189,7 +189,7 @@
   };
 
   return deepFreeze({
-    appVersion: 'r6.4',
+    appVersion: 'r6.3',
     taxRate: 0.10,
     priceMaster: priceMaster,
     priceTableVersion: priceMaster.priceTableVersion,
@@ -215,6 +215,7 @@
     internalModeTimeoutMinutes: 15,
     internalAccessConfirmationCode: '',
     internalDisplayConfirmationPhrase: '所内詳細を表示',
+    principalPrintPassword: 'Taka1979',
     standardCostRates: {
       playing: 6000,
       manager: 9000,

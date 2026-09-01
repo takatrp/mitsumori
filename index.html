@@ -82,12 +82,9 @@
     .mode-control { display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
     .btn.mode-active { box-shadow:0 0 0 3px rgba(47,113,131,.2); }
     .prospect-only { display:none; }
-    body.mode-prospect .prospect-only { display:block; }
-    body.mode-prospect .btn.prospect-only { display:inline-flex; }
-    body.mode-prospect .internal-mode-only { display:none!important; }
-    body.mode-principal #approval-section { display:none!important; }
-    body.mode-principal #prospect-guide,body.mode-principal #prospect-summary { display:block; }
-    body.mode-principal #adopt-diagram-standard { display:inline-flex; }
+    body.mode-prospect .prospect-only,body.mode-principal .prospect-only { display:block; }
+    body.mode-prospect .btn.prospect-only,body.mode-principal .btn.prospect-only { display:inline-flex; }
+    body.mode-prospect .internal-mode-only,body.mode-principal .internal-mode-only { display:none!important; }
     body.mode-prospect #service-section,body.mode-principal #service-section { border-color:#9fc7d1; box-shadow:0 8px 30px rgba(47,113,131,.12); }
     body.mode-prospect #service-section .card-hd,body.mode-principal #service-section .card-hd { background:#f0f8fa; }
     .prospect-guide { border:1px solid #9fc7d1; background:linear-gradient(135deg,#edf8fa,#fff); border-radius:14px; padding:.85rem 1rem; }
@@ -207,13 +204,13 @@
         <h2>表示</h2>
         <div class="mode-control">
           <button type="button" class="btn danger" id="new-quote-button">新しい見積りを開始</button>
-          <button type="button" class="btn ok" id="principal-mode-toggle" aria-pressed="false">所長入力・即時出力</button>
+          <button type="button" class="btn ok" id="principal-mode-toggle" aria-pressed="false">所長入力モード</button>
           <button type="button" class="btn" id="internal-mode-toggle" aria-pressed="false">所内詳細</button>
         </div>
       </div>
       <div class="card-bd">
         <p class="mode-description" id="mode-description">見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。</p>
-        <div class="alert ok hidden" id="principal-mode-banner">所長が入力から出力まで行うモードです。所内承認の操作だけを省略し、その他の出力前チェックを満たすと印刷／PDFが有効になります。</div>
+        <div class="alert ok hidden" id="principal-mode-banner">見込客向けの通常画面のまま金額を積み上げます。印刷／PDF時だけ所長パスワードを入力し、所内承認を代替します。</div>
         <p class="mini" id="mode-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
@@ -432,7 +429,7 @@
         </div>
       </section>
 
-      <section class="card internal-mode-only approval-mode-only" id="approval-section">
+      <section class="card internal-mode-only" id="approval-section">
         <div class="card-hd"><h2>所内確認・承認</h2><span class="pill" id="approval-status">未承認</span></div>
         <div class="card-bd section-stack">
           <div class="alert warn" id="price-master-warning">価格マスターの適用開始日、最終確認日又は承認者が未設定です。正式運用前にpricing-config.jsを更新してください。</div>
@@ -543,6 +540,17 @@
       <label class="field"><span class="field-name" id="internal-confirm-instruction"></span><input id="internal-confirm-input" type="text" autocomplete="off"></label>
       <div class="alert danger hidden" id="internal-confirm-error"></div>
       <div class="dialog-actions"><button type="button" class="btn" id="internal-confirm-cancel">キャンセル</button><button type="button" class="btn primary" id="internal-confirm-submit">所内詳細を表示</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="principal-print-dialog">
+    <div class="dialog-hd"><h2>所長確認後に印刷／PDF出力します</h2></div>
+    <div class="dialog-bd section-stack">
+      <p>見積内容を正式な顧客向け資料として出力します。所長パスワードを入力してください。</p>
+      <p class="mini">この確認は今回の印刷要求にだけ有効です。見積りの所内承認状態は変更しません。</p>
+      <label class="field"><span class="field-name">所長パスワード</span><input id="principal-print-password" type="password" autocomplete="off"></label>
+      <div class="alert danger hidden" id="principal-print-error"></div>
+      <div class="dialog-actions"><button type="button" class="btn" id="principal-print-cancel">キャンセル</button><button type="button" class="btn primary" id="principal-print-submit">印刷／PDFを解除</button></div>
     </div>
   </dialog>
 
