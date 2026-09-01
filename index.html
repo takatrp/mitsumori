@@ -80,12 +80,16 @@
     #interaction-mode-panel + .card { margin-top:1rem; }
     .mode-description { margin:0; line-height:1.7; }
     .mode-control { display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; }
+    .btn.mode-active { box-shadow:0 0 0 3px rgba(47,113,131,.2); }
     .prospect-only { display:none; }
     body.mode-prospect .prospect-only { display:block; }
     body.mode-prospect .btn.prospect-only { display:inline-flex; }
     body.mode-prospect .internal-mode-only { display:none!important; }
-    body.mode-prospect #service-section { border-color:#9fc7d1; box-shadow:0 8px 30px rgba(47,113,131,.12); }
-    body.mode-prospect #service-section .card-hd { background:#f0f8fa; }
+    body.mode-principal #approval-section { display:none!important; }
+    body.mode-principal #prospect-guide,body.mode-principal #prospect-summary { display:block; }
+    body.mode-principal #adopt-diagram-standard { display:inline-flex; }
+    body.mode-prospect #service-section,body.mode-principal #service-section { border-color:#9fc7d1; box-shadow:0 8px 30px rgba(47,113,131,.12); }
+    body.mode-prospect #service-section .card-hd,body.mode-principal #service-section .card-hd { background:#f0f8fa; }
     .prospect-guide { border:1px solid #9fc7d1; background:linear-gradient(135deg,#edf8fa,#fff); border-radius:14px; padding:.85rem 1rem; }
     .prospect-guide-row { display:flex; gap:1rem; justify-content:space-between; align-items:center; flex-wrap:wrap; }
     .prospect-summary { border:2px solid var(--primary); border-radius:14px; overflow:hidden; background:#fff; }
@@ -203,11 +207,13 @@
         <h2>表示</h2>
         <div class="mode-control">
           <button type="button" class="btn danger" id="new-quote-button">新しい見積りを開始</button>
+          <button type="button" class="btn ok" id="principal-mode-toggle" aria-pressed="false">所長入力・即時出力</button>
           <button type="button" class="btn" id="internal-mode-toggle" aria-pressed="false">所内詳細</button>
         </div>
       </div>
       <div class="card-bd">
         <p class="mode-description" id="mode-description">見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。</p>
+        <div class="alert ok hidden" id="principal-mode-banner">所長が入力から出力まで行うモードです。所内承認の操作だけを省略し、その他の出力前チェックを満たすと印刷／PDFが有効になります。</div>
         <p class="mini" id="mode-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
@@ -426,7 +432,7 @@
         </div>
       </section>
 
-      <section class="card internal-mode-only" id="approval-section">
+      <section class="card internal-mode-only approval-mode-only" id="approval-section">
         <div class="card-hd"><h2>所内確認・承認</h2><span class="pill" id="approval-status">未承認</span></div>
         <div class="card-bd section-stack">
           <div class="alert warn" id="price-master-warning">価格マスターの適用開始日、最終確認日又は承認者が未設定です。正式運用前にpricing-config.jsを更新してください。</div>
@@ -530,9 +536,9 @@
   </main>
 
   <dialog id="internal-confirm-dialog">
-    <div class="dialog-hd"><h2>所内詳細を表示します</h2></div>
+    <div class="dialog-hd"><h2 id="internal-confirm-dialog-title">所内詳細を表示します</h2></div>
     <div class="dialog-bd section-stack">
-      <p>所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。</p>
+      <p id="internal-confirm-message">所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。</p>
       <p class="mini">これは機密保護のための認証ではなく、対面時の誤表示を防ぐ確認です。</p>
       <label class="field"><span class="field-name" id="internal-confirm-instruction"></span><input id="internal-confirm-input" type="text" autocomplete="off"></label>
       <div class="alert danger hidden" id="internal-confirm-error"></div>
@@ -552,7 +558,7 @@
 
   <div class="sticky-actions screen-only">
     <div>
-      <span class="mini">顧客向け出力には社内原価・利益率・例外理由を含めません。</span>
+      <span class="mini" id="action-mode-note">顧客向け出力には社内原価・利益率・例外理由を含めません。</span>
       <div class="actions">
         <button type="button" class="btn danger" id="reset-button">新しい見積りを開始</button>
         <button type="button" class="btn" id="preview-button">見積プレビュー</button>

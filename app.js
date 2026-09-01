@@ -11,8 +11,10 @@
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
   const interactionModeDescriptions = {
     internal: '所内で標準報酬、原価、利益率まで確認しています。「見込客画面に戻る」を押すと対面用の画面へ戻ります。',
+    principal: '所長が入力から確認、印刷・PDFまで一人で完結するモードです。所内承認の操作だけを省略し、その他の出力前チェックは維持します。',
     prospect: '見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。'
   };
+  const defaultActionModeNote = '顧客向け出力には社内原価・利益率・例外理由を含めません。';
   const officePresets = {
     kobe: { branch: '【神戸事務所】', address: '〒651-0086 神戸市中央区磯上通8-1-1-7F', tel: 'TEL 078-242-2177', representative: '代表社員 松本考史' },
     sakaiminato: { branch: '【境港事務所】', address: '〒684-0071 鳥取県境港市外江町3801', tel: 'TEL 0859-44-6195', representative: '代表社員 松本正福' }
@@ -327,6 +329,10 @@
     return core.calculateApprovalFingerprint(buildApprovalSnapshot());
   }
 
+  function isPrincipalDirectMode() {
+    return state.interactionMode === 'principal';
+  }
+
   function invalidateApprovalIfChanged() {
     if (state.approval.status !== 'approved' || !state.approval.approvalFingerprint) return false;
     if (state.approval.approvalFingerprint === currentApprovalFingerprint()) return false;
@@ -351,11 +357,18 @@
   }
 
   function handleInternalActivity() {
-    if (state.interactionMode === 'internal') startInternalIdleTimer();
+    if (state.interactionMode === 'internal' || state.interactionMode === 'principal') startInternalIdleTimer();
   }
 
   // 静的サイト上のアクセス制御ではなく、対面中に所内情報を誤表示しないための確認手順。
-  function requestInternalMode() {
+  let requestedDetailMode = 'internal';
+  function requestInternalMode(mode) {
+    requestedDetailMode = mode === 'principal' ? 'principal' : 'internal';
+    const principal = requestedDetailMode === 'principal';
+    $('internal-confirm-dialog-title').textContent = principal ? '所長入力・即時出力モードへ切り替えます' : '所内詳細を表示します';
+    $('internal-confirm-message').innerHTML = principal
+      ? '所内原価、利益率、例外理由等を表示し、所内承認の操作を省略して出力できるモードです。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。'
+      : '所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。';
     $('internal-confirm-input').value = '';
     $('internal-confirm-error').classList.add('hidden');
     $('internal-confirm-dialog').showModal();
@@ -371,7 +384,7 @@
       return;
     }
     $('internal-confirm-dialog').close();
-    setInteractionMode('internal');
+    setInteractionMode(requestedDetailMode);
   }
 
   function currentConsumptionTaxStatus() {
@@ -385,27 +398,35 @@
   }
 
   function setInteractionMode(mode, shouldRecalculate) {
-    if (!['internal', 'prospect'].includes(mode)) return;
+    if (!['internal', 'principal', 'prospect'].includes(mode)) return;
     state.interactionMode = mode;
-    document.body.classList.remove('mode-internal', 'mode-prospect');
+    document.body.classList.remove('mode-internal', 'mode-principal', 'mode-prospect');
     document.body.classList.add('mode-' + mode);
     const internalModeButton = $('internal-mode-toggle');
+    const principalModeButton = $('principal-mode-toggle');
     const internal = mode === 'internal';
-    internalModeButton.classList.toggle('primary', internal);
+    const principal = mode === 'principal';
+    const detailsVisible = internal || principal;
+    internalModeButton.classList.toggle('mode-active', internal);
     internalModeButton.setAttribute('aria-pressed', String(internal));
     internalModeButton.textContent = internal ? '見込客画面に戻る' : '所内詳細';
+    principalModeButton.classList.toggle('mode-active', principal);
+    principalModeButton.setAttribute('aria-pressed', String(principal));
+    principalModeButton.textContent = principal ? '見込客画面に戻る' : '所長入力・即時出力';
     $('mode-description').textContent = interactionModeDescriptions[mode];
-    $('value-section-title').textContent = internal ? '1. 松本会計報酬算定上の付加価値額' : '付加価値算定プロセス';
-    $('value-section-pill').textContent = internal ? '料金帯判定は12か月換算値' : '計算過程をその場で確認';
-    $('band-table-summary').textContent = internal ? '現行の所内標準価格表を確認' : '標準報酬の区分を確認';
+    $('principal-mode-banner').classList.toggle('hidden', !principal);
+    $('value-section-title').textContent = detailsVisible ? '1. 松本会計報酬算定上の付加価値額' : '付加価値算定プロセス';
+    $('value-section-pill').textContent = principal ? '入力しながら金額を積み上げ' : (internal ? '料金帯判定は12か月換算値' : '計算過程をその場で確認');
+    $('band-table-summary').textContent = detailsVisible ? '現行の所内標準価格表を確認' : '標準報酬の区分を確認';
     $('service-section-title').textContent = mode === 'prospect' ? 'お見積り内容の確認' : '3. 受託業務・サービス';
-    $('service-section-pill').textContent = mode === 'prospect' ? '選択内容を即時反映' : '既存価格を維持';
-    $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + (mode === 'internal' ? '（実際の所内業務範囲は設定で編集）' : '');
+    $('service-section-pill').textContent = principal ? '入力内容を即時集計' : (mode === 'prospect' ? '選択内容を即時反映' : '既存価格を維持');
+    $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + (detailsVisible ? '（実際の所内業務範囲は設定で編集）' : '');
+    $('action-mode-note').textContent = principal ? '所長入力モード：承認操作を省略し、その他の必須チェック完了後に出力できます。' : defaultActionModeNote;
     if (mode === 'prospect' && state.document.outputType !== 'customer-only') {
       state.document.outputType = 'customer-only';
       $('output-type').value = 'customer-only';
     }
-    if (mode === 'internal') {
+    if (detailsVisible) {
       $('mode-notice').textContent = '';
       startInternalIdleTimer();
     } else {
@@ -457,6 +478,35 @@
     }
     syncServiceSelectionControls();
     recalculate();
+  }
+
+  function caretPositionAfterMoneyFormat(formattedValue, logicalPosition) {
+    if (logicalPosition <= 0) return 0;
+    let consumed = 0;
+    for (let index = 0; index < formattedValue.length; index += 1) {
+      if (formattedValue[index] !== ',') consumed += 1;
+      if (consumed >= logicalPosition) return index + 1;
+    }
+    return formattedValue.length;
+  }
+
+  function formatMoneyInputRealtime(event) {
+    const input = event.target;
+    if (event.isComposing || !input || !input.matches || !input.matches('input[data-money]')) return;
+    const before = input.value;
+    const formatted = core.formatMoneyInputText(before);
+    if (formatted === before) return;
+    const selectionStart = input.selectionStart;
+    const selectionEnd = input.selectionEnd;
+    const logicalStart = selectionStart === null ? null : before.slice(0, selectionStart).replace(/,/g, '').length;
+    const logicalEnd = selectionEnd === null ? null : before.slice(0, selectionEnd).replace(/,/g, '').length;
+    input.value = formatted;
+    if (logicalStart !== null && logicalEnd !== null && document.activeElement === input) {
+      input.setSelectionRange(
+        caretPositionAfterMoneyFormat(formatted, logicalStart),
+        caretPositionAfterMoneyFormat(formatted, logicalEnd)
+      );
+    }
   }
 
   function bindMoneyInput(input, getter, setter, options) {
@@ -813,7 +863,7 @@
   }
 
   function buildValidation(options) {
-    const settings = Object.assign({ ignoreApproval: false }, options || {});
+    const settings = Object.assign({ ignoreApproval: isPrincipalDirectMode() }, options || {});
     const specialServices = config.services.incomeTaxReturn.filter((definition) => definition.priceConfirmationRequired).map((definition) => {
       const item = state.services.income[definition.id];
       return { selected: state.entity === 'income' && item.selected, priceConfirmationRequired: true, priceConfirmed: item.priceConfirmed };
@@ -1062,8 +1112,12 @@
 
   function renderProspectSummary() {
     const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
-    $('prospect-approval-label').textContent = approved ? '所内承認済み' : '参考表示・所内未承認';
-    $('prospect-approval-label').classList.toggle('ok', approved);
+    const principal = isPrincipalDirectMode();
+    const principalReady = principal && buildValidation().allowed;
+    $('prospect-approval-label').textContent = principal
+      ? (principalReady ? '所長確認・即時出力可能' : '入力中・出力前チェック未完了')
+      : (approved ? '所内承認済み' : '参考表示・所内未承認');
+    $('prospect-approval-label').classList.toggle('ok', approved || principalReady);
     const fee = state.decision.finalMonthlyFee;
     const feeReady = Number.isFinite(fee) && fee > 0 && state.decision.finalFeeConfirmed;
     $('corp-closing-impact').textContent = feeReady ? '年間 ' + yen(fee * config.multipliers.corporateClosing) + ' を加算（月額×' + config.multipliers.corporateClosing + '）' : '月次顧問料の確定後に年間加算額を表示';
@@ -1104,8 +1158,10 @@
     $('print-scope').textContent = state.document.scope || '';
     $('print-notes').textContent = state.document.notes || '';
     const approved = state.approval.status === 'approved' && state.approval.approvalFingerprint === currentApprovalFingerprint();
-    $('print-approval-label').textContent = approved ? '' : '参考表示・所内未承認';
-    $('print-approval-label').classList.toggle('hidden', approved);
+    const principal = isPrincipalDirectMode();
+    const principalReady = principal && buildValidation().allowed;
+    $('print-approval-label').textContent = principal ? '入力中・出力前チェック未完了' : (approved ? '' : '参考表示・所内未承認');
+    $('print-approval-label').classList.toggle('hidden', approved || principalReady);
     $('print-total').textContent = estimate && estimate.status === 'calculated' ? yen(estimate.total) + '（税込）' : '未確定';
     $('quote-rows').innerHTML = quoteLines().map((line) => '<tr><td>' + escapeHtml(line.name) + '</td><td>' + escapeHtml(line.unit) + '</td><td>' + escapeHtml(line.quantity) + '</td><td class="money">' + yen(line.annual) + '</td></tr>').join('') || '<tr><td colspan="4" class="empty-state">見積項目がありません</td></tr>';
     $('quote-totals').innerHTML = estimate && estimate.status === 'calculated' ? '<tr><th>小計</th><td class="money">' + yen(estimate.subtotal) + '</td></tr><tr><th>消費税 ' + (config.taxRate * 100) + '%</th><td class="money">' + yen(estimate.consumptionTax) + '</td></tr><tr><th>税込合計</th><td class="money"><b>' + yen(estimate.total) + '</b></td></tr>' : '';
@@ -1228,9 +1284,12 @@
 
   function renderValidation() {
     const validation = buildValidation();
+    const principal = isPrincipalDirectMode();
     model.validation = validation;
-    $('validation-count').textContent = validation.allowed ? '出力可能' : validation.errors.length + '件の確認事項';
-    $('validation-errors').innerHTML = validation.allowed ? alertHtml('顧客向け出力の必須チェックを満たしています。', 'ok') : validation.errors.map((error) => alertHtml(error.message, 'danger')).join('');
+    $('validation-count').textContent = validation.allowed ? (principal ? '即時出力可能' : '出力可能') : validation.errors.length + '件の確認事項';
+    $('validation-errors').innerHTML = validation.allowed
+      ? alertHtml(principal ? '所長入力モードの出力前チェックを満たしています。承認操作なしで印刷／PDFへ進めます。' : '顧客向け出力の必須チェックを満たしています。', 'ok')
+      : validation.errors.map((error) => alertHtml(error.message, 'danger')).join('');
     $('customer-print-button').disabled = !validation.allowed;
     $('internal-print-button').disabled = !validation.allowed;
   }
@@ -1353,10 +1412,15 @@
   }
 
   function bindStaticInputs() {
+    document.addEventListener('input', formatMoneyInputRealtime, true);
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
     $('internal-mode-toggle').addEventListener('click', () => {
       if (state.interactionMode === 'internal') setInteractionMode('prospect');
-      else requestInternalMode();
+      else requestInternalMode('internal');
+    });
+    $('principal-mode-toggle').addEventListener('click', () => {
+      if (state.interactionMode === 'principal') setInteractionMode('prospect');
+      else requestInternalMode('principal');
     });
     setDocumentFields();
     $('period-months').value = state.fiscalMonths;
@@ -1422,7 +1486,7 @@
       state.preferences.internalModeTimeoutMinutes = Math.max(1, Math.floor(numberOrZero($('internal-timeout-minutes').value) || config.internalModeTimeoutMinutes));
       $('internal-timeout-minutes').value = state.preferences.internalModeTimeoutMinutes;
       saveState();
-      if (state.interactionMode === 'internal') startInternalIdleTimer();
+      if (state.interactionMode === 'internal' || state.interactionMode === 'principal') startInternalIdleTimer();
     });
     const comparisonMoneyFields = {
       'current-monthly-fee': 'currentMonthlyFee', 'current-closing-fee': 'currentClosingFee', 'current-consumption-fee': 'currentConsumptionTaxFee', 'current-annual-fee': 'currentAnnualFee'

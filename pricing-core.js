@@ -62,6 +62,16 @@
     return Number(value).toLocaleString('ja-JP', { maximumFractionDigits: 20 });
   }
 
+  function formatMoneyInputText(value) {
+    const raw = String(value == null ? '' : value);
+    const normalized = raw.replace(/,/g, '');
+    if (['', '+', '-', '.', '+.', '-.'].includes(normalized)) return normalized;
+    const match = /^([+-]?)(\d*)(\.\d*)?$/.exec(normalized);
+    if (!match || (!match[2] && !match[3])) return raw;
+    const groupedInteger = match[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return match[1] + groupedInteger + (match[3] || '');
+  }
+
   function formatBandLabel(bandOrMin, maxValue) {
     const band = typeof bandOrMin === 'object' && bandOrMin !== null
       ? (bandOrMin.band || bandOrMin)
@@ -1146,6 +1156,7 @@
     determinePricingBand: determinePricingBand,
     findBoundaryWarning: findBoundaryWarning,
     formatBandLabel: formatBandLabel,
+    formatMoneyInputText: formatMoneyInputText,
     calculateServiceFee: calculateServiceFee,
     calculateConsumptionTax: calculateConsumptionTax,
     calculateAnnualEstimate: calculateAnnualEstimate,

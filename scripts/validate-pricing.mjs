@@ -38,6 +38,21 @@ function expectBand(entityType, value, fee) {
   assert.equal(result.fee, fee);
 }
 
+test('金額入力文字列を入力途中から3桁区切りで表示する', () => {
+  assert.equal(core.formatMoneyInputText('1'), '1');
+  assert.equal(core.formatMoneyInputText('1234'), '1,234');
+  assert.equal(core.formatMoneyInputText('1234567'), '1,234,567');
+  assert.equal(core.formatMoneyInputText('1,2345'), '12,345');
+});
+
+test('金額入力の負号、小数点及び入力途中状態を維持する', () => {
+  assert.equal(core.formatMoneyInputText('-123456'), '-123,456');
+  assert.equal(core.formatMoneyInputText('-'), '-');
+  assert.equal(core.formatMoneyInputText('1234.'), '1,234.');
+  assert.equal(core.formatMoneyInputText('1234.5'), '1,234.5');
+  assert.equal(core.formatMoneyInputText('.5'), '.5');
+});
+
 const corporateCases = [
   [0, 35000],
   [4999999, 35000],
@@ -636,8 +651,8 @@ test('現行価格、倍率、ソフトウェア請求額を変更していな�
   assert.deepEqual(config.services.software.slice(0, 3).map((item) => item.monthlyDirectCost), [null, null, null]);
 });
 
-test('r6.3改修後も価格表版はr6.0を維持する', () => {
-  assert.equal(config.appVersion, 'r6.3');
+test('r6.4改修後も価格表版はr6.0を維持する', () => {
+  assert.equal(config.appVersion, 'r6.4');
   assert.equal(config.priceMaster.priceTableVersion, 'r6.0');
 });
 
@@ -681,6 +696,8 @@ try {
   assert.doesNotMatch(htmlSource, />見込客と確認</);
   assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
   assert.match(htmlSource, /id="internal-mode-toggle"/);
+  assert.match(htmlSource, /id="principal-mode-toggle"/);
+  assert.match(htmlSource, /所長入力・即時出力/);
   assert.match(htmlSource, /id="prospect-summary"/);
   assert.match(htmlSource, /<section class="card" id="value-section">/);
   assert.match(htmlSource, /id="value-diagram-terms"/);
@@ -700,6 +717,11 @@ try {
   assert.match(appSource, /function setInteractionMode\(/);
   assert.match(appSource, /interactionMode: 'prospect'/);
   assert.match(appSource, /merged\.interactionMode = 'prospect'/);
+  assert.match(appSource, /\['internal', 'principal', 'prospect'\]/);
+  assert.match(appSource, /function isPrincipalDirectMode\(/);
+  assert.match(appSource, /ignoreApproval: isPrincipalDirectMode\(\)/);
+  assert.match(appSource, /function formatMoneyInputRealtime\(/);
+  assert.match(appSource, /addEventListener\('input', formatMoneyInputRealtime, true\)/);
   assert.match(appSource, /function renderValueDiagram\(/);
   assert.match(appSource, /function adoptStandardFee\(/);
   assert.match(appSource, /function buildApprovalSnapshot\(/);
@@ -717,15 +739,16 @@ try {
   assert.match(coreSource, /function calculateLinkedRevenueMonths\(/);
   assert.match(coreSource, /function calculateFixedAnnualRevenue\(/);
   assert.match(coreSource, /function calculateProfitStructure\(/);
+  assert.match(coreSource, /function formatMoneyInputText\(/);
   assert.match(coreSource, /approvalStatus !== 'approved'/);
   assert.match(appSource, /function renderProspectSummary\(/);
   assert.match(appSource, /config\.multipliers\.corporateClosing/);
   assert.match(appSource, /config\.multipliers\.consumptionTaxReturn/);
-  console.log('✓ r6.3の見込客表示、所内承認、保存分離及び誤表示防止を実装している');
+  console.log('✓ r6.4の所長即時出力、リアルタイム金額表示、所内承認及び保存分離を実装している');
   passed += 1;
 } catch (error) {
-  failures.push({ name: 'r6.3 UI・承認・保存分離のソース検査', error });
-  console.error('✗ r6.3 UI・承認・保存分離のソース検査');
+  failures.push({ name: 'r6.4 UI・即時出力・承認・保存分離のソース検査', error });
+  console.error('✗ r6.4 UI・即時出力・承認・保存分離のソース検査');
   console.error(error.stack || error.message || error);
 }
 
