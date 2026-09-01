@@ -10,9 +10,9 @@
   const entityLabels = { corp: '法人', sole: '個人', income: '所得税確定申告' };
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
   const interactionModeDescriptions = {
-    internal: '所内で標準報酬、原価、利益率まで確認しています。「見込客画面に戻る」を押すと対面用の画面へ戻ります。',
-    principal: '見込客向けの通常画面で金額を一緒に確認し、印刷・PDF時だけ所長パスワードで承認を代替するモードです。社内原価・利益率は表示しません。',
-    prospect: '見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。'
+    internal: '所内で標準報酬、原価、利益率まで確認しています。「ノーマルモードに戻る」を押すと対面用の画面へ戻ります。',
+    principal: 'ノーマルモードと同じ画面で金額を一緒に確認し、印刷・PDF時だけ所長パスワードで承認を代替するモードです。社内原価・利益率は表示しません。',
+    prospect: '画面を一緒に見ながら算定根拠と受託業務を確認するモードです。社内原価・利益率は表示しません。'
   };
   const defaultActionModeNote = '顧客向け出力には社内原価・利益率・例外理由を含めません。';
   const officePresets = {
@@ -165,7 +165,7 @@
     merged.comparison = Object.assign({}, defaults.comparison, stored.comparison || {});
     merged.preferences = Object.assign({}, defaults.preferences, stored.preferences || {});
     if (!['corp', 'sole', 'income'].includes(merged.entity)) merged.entity = 'corp';
-    // 画面を開いた時は必ず見込客向け表示から開始し、所内詳細はその都度明示操作で開く。
+    // 画面を開いた時は必ずノーマル表示から開始し、所内詳細はその都度明示操作で開く。
     merged.interactionMode = 'prospect';
     const storedServices = stored.services || {};
     if (!Object.prototype.hasOwnProperty.call(storedServices, 'otherSpotSelected')) {
@@ -368,7 +368,7 @@
     const minutes = Number(state.preferences.internalModeTimeoutMinutes) || config.internalModeTimeoutMinutes;
     internalIdleTimer = window.setTimeout(() => {
       setInteractionMode('prospect');
-      $('mode-notice').textContent = '一定時間操作がなかったため、見込客向け画面へ戻りました。';
+      $('mode-notice').textContent = '一定時間操作がなかったため、ノーマルモードへ戻りました。';
     }, Math.max(1, minutes) * 60 * 1000);
   }
 
@@ -419,7 +419,7 @@
     const detailsVisible = internal;
     internalModeButton.classList.toggle('mode-active', internal);
     internalModeButton.setAttribute('aria-pressed', String(internal));
-    internalModeButton.textContent = internal ? '見込客画面に戻る' : '所内詳細';
+    internalModeButton.textContent = internal ? 'ノーマルモードに戻る' : '所内詳細';
     principalModeButton.classList.toggle('mode-active', principal);
     principalModeButton.setAttribute('aria-pressed', String(principal));
     principalModeButton.textContent = principal ? 'ノーマルモードに戻る' : '所長入力モード';
@@ -652,7 +652,7 @@
       const row = document.createElement('div');
       row.className = 'service-row software-row prospect-choice-row';
       row.dataset.softwareId = definition.id;
-      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><span class="field-name">顧客請求額</span><input type="text" inputmode="numeric" data-money></label><label class="field internal-mode-only"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money placeholder="未設定"></label><span class="pill internal-mode-only" data-gross-profit>粗利益：未確定</span>';
+      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><input type="text" inputmode="numeric" data-money aria-label="' + escapeHtml(item.name) + ' 月額料金"></label><label class="field internal-mode-only"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money placeholder="未設定"></label><span class="pill internal-mode-only" data-gross-profit>粗利益：未確定</span>';
       const checkbox = row.querySelector('input[type="checkbox"]');
       const inputs = row.querySelectorAll('input[data-money]');
       const grossProfit = row.querySelector('[data-gross-profit]');
@@ -925,9 +925,9 @@
     if (state.entity !== 'income' && !model.recommendation && Number.isFinite(state.decision.finalMonthlyFee) && model.bandResult && Number.isFinite(model.bandResult.fee) && state.decision.finalMonthlyFee < model.bandResult.fee && !(state.decision.exceptionReason + state.decision.exceptionMemo).trim()) add('exception_reason_missing', '最終月次顧問料が付加価値帯基準額を下回るため、例外理由を入力してください。');
     if (state.entity !== 'income' && model.adjustmentResult.status === 'invalid') add('invalid_adjustment_amount', '業務量・複雑性の調整額を数値で入力してください。');
     if (state.entity !== 'income' && model.costFloor.status !== 'calculated' && !(state.decision.costFloorExceptionReason && state.decision.costFloorExceptionMemo.trim())) add('cost_floor_exception_missing', '原価下限が未確定です。所内詳細で「原価下限未確認」の例外理由と詳細メモを入力してください。');
-    if (!state.document.scope.trim()) add('scope_missing', '見積書に記載する業務範囲を入力してください。');
+    if (!state.document.scope.trim()) add('scope_missing', '業務範囲は印刷／PDF出力の必須項目です。入力してください。');
     selectedSoftware().forEach((software) => {
-      if (!Number.isFinite(software.monthlyBillingPrice) || software.monthlyBillingPrice < 0) add('software_billing_invalid', '選択したソフトウェアの顧客請求額を確認してください。');
+      if (!Number.isFinite(software.monthlyBillingPrice) || software.monthlyBillingPrice < 0) add('software_billing_invalid', '選択したソフトウェアの月額料金を確認してください。');
       if (software.id === 'custom' && !String(software.name || '').trim()) add('custom_software_name_missing', '任意追加ソフトの名称を入力してください。');
     });
     if (state.services.otherSpotSelected && !String(state.services.otherSpotName || '').trim()) add('other_spot_name_missing', '選択したその他年次・スポット業務の名称を入力してください。');
@@ -1312,6 +1312,7 @@
         ? '所長入力モード：印刷／PDFボタンを押した後、所長パスワードで出力を解除します。'
         : '所長入力モード：' + validation.errors[0].message;
     }
+    $('scope-text').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'scope_missing')));
     $('customer-print-button').disabled = !validation.allowed;
     $('internal-print-button').disabled = !standardValidation.allowed;
   }

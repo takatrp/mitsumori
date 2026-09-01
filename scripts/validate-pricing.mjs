@@ -697,7 +697,15 @@ try {
     readFile(join(repositoryRoot, 'pricing-config.js'), 'utf8'),
     readFile(join(repositoryRoot, 'pricing-core.js'), 'utf8')
   ]);
-  assert.doesNotMatch(htmlSource, />見込客と確認</);
+  assert.doesNotMatch(htmlSource, /見込客/);
+  assert.doesNotMatch(appSource, /見込客/);
+  assert.doesNotMatch(htmlSource, /顧客請求額/);
+  assert.doesNotMatch(appSource, /顧客請求額/);
+  assert.match(htmlSource, /業務範囲 <span class="required-mark">\*<\/span>/);
+  assert.match(htmlSource, /id="scope-text" required aria-required="true"/);
+  assert.match(htmlSource, /印刷／PDF出力時に必須です。/);
+  assert.match(appSource, /'scope_missing'/);
+  assert.match(appSource, /scope-text'\)\.setAttribute\('aria-invalid'/);
   assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
   assert.match(htmlSource, /id="internal-mode-toggle"/);
   assert.match(htmlSource, /id="principal-mode-toggle"/);

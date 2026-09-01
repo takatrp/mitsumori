@@ -44,6 +44,7 @@
     .field-name { display:block; margin-bottom:.3rem; font-size:.84rem; color:var(--sub); font-weight:700; }
     input[type="text"],input[type="date"],input[type="number"],select,textarea { width:100%; min-height:42px; border:1px solid #c7d3d7; border-radius:10px; padding:.52rem .65rem; color:var(--ink); background:#fff; }
     input:focus,select:focus,textarea:focus { outline:3px solid rgba(47,113,131,.16); border-color:var(--primary); }
+    input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"] { border-color:var(--danger); box-shadow:0 0 0 2px rgba(183,45,45,.12); }
     textarea { min-height:78px; resize:vertical; }
     input[data-money],input[data-number] { text-align:right; }
     .inline-check { display:flex; gap:.5rem; align-items:flex-start; line-height:1.45; }
@@ -209,8 +210,8 @@
         </div>
       </div>
       <div class="card-bd">
-        <p class="mode-description" id="mode-description">見込客と一緒に算定根拠と受託業務を確認する画面です。社内原価・利益率は表示しません。</p>
-        <div class="alert ok hidden" id="principal-mode-banner">見込客向けの通常画面のまま金額を積み上げます。印刷／PDF時だけ所長パスワードを入力し、所内承認を代替します。</div>
+        <p class="mode-description" id="mode-description">画面を一緒に見ながら算定根拠と受託業務を確認するモードです。社内原価・利益率は表示しません。</p>
+        <div class="alert ok hidden" id="principal-mode-banner">ノーマルモードと同じ画面のまま金額を積み上げます。印刷／PDF時だけ所長パスワードを入力し、所内承認を代替します。</div>
         <p class="mini" id="mode-notice" role="status" aria-live="polite"></p>
       </div>
     </section>
@@ -349,11 +350,11 @@
           <details open id="software-services">
             <summary>ソフトウェアレンタル</summary>
             <div class="details-body section-stack">
-              <p class="mini internal-mode-only">顧客請求額と松本会計の月額直接原価を分けて管理します。直接原価は所内で確認するまで未設定です。</p>
+              <p class="mini internal-mode-only">月額料金と松本会計の月額直接原価を分けて管理します。直接原価は所内で確認するまで未設定です。</p>
               <div id="software-list"></div>
               <div class="grid three">
                 <label class="field"><span class="field-name">任意追加ソフト名</span><input id="custom-software-name" type="text"></label>
-                <label class="field"><span class="field-name">顧客への月額請求額</span><input id="custom-software-price" type="text" inputmode="numeric" data-money></label>
+                <label class="field"><span class="field-name">月額料金</span><input id="custom-software-price" type="text" inputmode="numeric" data-money></label>
                 <label class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価</span><input id="custom-software-cost" type="text" inputmode="numeric" data-money placeholder="未設定"></label>
               </div>
               <label class="inline-check prospect-choice"><input id="custom-software-selected" type="checkbox"><span>任意追加ソフトを見積りに含める</span></label>
@@ -481,7 +482,7 @@
       <section class="card" id="scope-section">
         <div class="card-hd"><h2>7. 見積書の業務範囲・備考</h2></div>
         <div class="card-bd grid two">
-          <label class="field"><span class="field-name">業務範囲</span><textarea id="scope-text" placeholder="例：月次監査、税務相談、決算・申告業務"></textarea></label>
+          <label class="field"><span class="field-name">業務範囲 <span class="required-mark">*</span></span><textarea id="scope-text" required aria-required="true" placeholder="例：月次監査、税務相談、決算・申告業務"></textarea><span class="mini">印刷／PDF出力時に必須です。</span></label>
           <label class="field"><span class="field-name">顧客向け備考</span><textarea id="notes-text"></textarea></label>
         </div>
       </section>
@@ -535,7 +536,7 @@
   <dialog id="internal-confirm-dialog">
     <div class="dialog-hd"><h2 id="internal-confirm-dialog-title">所内詳細を表示します</h2></div>
     <div class="dialog-bd section-stack">
-      <p id="internal-confirm-message">所内原価、利益率、例外理由等を表示します。<br>見込客に画面を提示している場合は、表示を切り替えてよいか確認してください。</p>
+      <p id="internal-confirm-message">所内原価、利益率、例外理由等を表示します。<br>面談中の場合は、表示を切り替えてよいか確認してください。</p>
       <p class="mini">これは機密保護のための認証ではなく、対面時の誤表示を防ぐ確認です。</p>
       <label class="field"><span class="field-name" id="internal-confirm-instruction"></span><input id="internal-confirm-input" type="text" autocomplete="off"></label>
       <div class="alert danger hidden" id="internal-confirm-error"></div>
