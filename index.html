@@ -319,6 +319,13 @@
             </div>
           </div>
 
+          <details open id="discount-services">
+            <summary>値引き</summary>
+            <div class="details-body">
+              <label class="field prospect-choice"><span class="field-name">値引き額（年額・税抜）</span><input id="annual-discount" name="annual-discount-amount" type="text" inputmode="numeric" data-money autocomplete="off" aria-describedby="annual-discount-help"><span class="prospect-impact" id="annual-discount-help">正の金額で入力し、値引き前の税抜小計から差し引きます。</span></label>
+            </div>
+          </details>
+
           <div id="monthly-services">
             <div class="grid two">
               <label class="inline-check prospect-choice" id="closing-corp-row"><input id="corp-closing" type="checkbox"><span><b>法人決算・申告一式</b><br><span class="mini">最終月次顧問料の4か月分</span><span class="prospect-impact" id="corp-closing-impact">金額を確認中</span></span></label>
@@ -355,9 +362,9 @@
               <p class="mini internal-mode-only">月額料金と松本会計の月額直接原価を分けて管理します。直接原価は所内で確認するまで未設定です。</p>
               <div id="software-list"></div>
               <div class="grid three">
-                <label class="field"><span class="field-name">任意追加ソフト名</span><input id="custom-software-name" type="text"></label>
-                <label class="field"><span class="field-name">月額料金</span><input id="custom-software-price" type="text" inputmode="numeric" data-money></label>
-                <label class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価</span><input id="custom-software-cost" type="text" inputmode="numeric" data-money placeholder="未設定"></label>
+                <label class="field"><span class="field-name">任意追加ソフト名</span><input id="custom-software-name" name="custom-software-name" type="text" autocomplete="off"></label>
+                <label class="field"><span class="field-name">月額料金</span><input id="custom-software-price" name="custom-software-monthly-amount" type="text" inputmode="numeric" data-money autocomplete="off"></label>
+                <label class="field internal-mode-only"><span class="field-name">松本会計の月額直接原価</span><input id="custom-software-cost" name="custom-software-direct-cost" type="text" inputmode="numeric" data-money autocomplete="off" placeholder="未設定"></label>
               </div>
               <label class="inline-check prospect-choice"><input id="custom-software-selected" type="checkbox"><span>任意追加ソフトを見積りに含める</span></label>
               <span class="pill internal-mode-only" id="custom-software-gross">月額粗利益：未確定</span>
@@ -551,7 +558,7 @@
     <div class="dialog-bd section-stack">
       <p>見積内容を正式な顧客向け資料として出力します。所長パスワードを入力してください。</p>
       <p class="mini">この確認は今回の印刷要求にだけ有効です。見積りの所内承認状態は変更しません。</p>
-      <label class="field"><span class="field-name">所長パスワード</span><input id="principal-print-password" type="password" autocomplete="off"></label>
+      <label class="field"><span class="field-name">所長パスワード</span><input id="principal-print-password" name="principal-print-authorization" type="password" autocomplete="one-time-code"></label>
       <div class="alert danger hidden" id="principal-print-error"></div>
       <div class="dialog-actions"><button type="button" class="btn" id="principal-print-cancel">キャンセル</button><button type="button" class="btn primary" id="principal-print-submit">印刷／PDFを解除</button></div>
     </div>

@@ -304,6 +304,33 @@ test('年間見積は全構成要素、消費税及び税込合計を計算す�
   assert.equal(estimate.total, 940500);
 });
 
+test('値引きは税抜小計から差し引き、値引き後に消費税を計算する', () => {
+  const estimate = core.calculateAnnualEstimate({
+    entityType: 'corp',
+    monthlyAdvisoryFee: 10000,
+    annualDiscountAmount: 10000,
+    taxRate: 0.10
+  });
+  assert.equal(estimate.status, 'calculated');
+  assert.equal(estimate.breakdown.preDiscountSubtotal, 120000);
+  assert.equal(estimate.breakdown.annualDiscountAmount, 10000);
+  assert.equal(estimate.subtotal, 110000);
+  assert.equal(estimate.consumptionTax, 11000);
+  assert.equal(estimate.total, 121000);
+});
+
+test('負の値引き額を拒否する', () => {
+  const estimate = core.calculateAnnualEstimate({ monthlyAdvisoryFee: 10000, annualDiscountAmount: -1 });
+  assert.equal(estimate.status, 'invalid');
+  assert.equal(estimate.reason, 'invalid_discount_amount');
+});
+
+test('値引き前小計を超える値引きを拒否する', () => {
+  const estimate = core.calculateAnnualEstimate({ monthlyAdvisoryFee: 10000, annualDiscountAmount: 120001 });
+  assert.equal(estimate.status, 'invalid');
+  assert.equal(estimate.reason, 'discount_exceeds_subtotal');
+});
+
 test('消費税は現行と同じ四捨五入で計算する', () => {
   const tax = core.calculateConsumptionTax({ amount: 10005, taxRate: 0.10 });
   assert.equal(tax.tax, 1001);
@@ -398,6 +425,12 @@ test('固定年間売上200,000円では原価下限100,000円', () => {
 
 test('年間調整額▲50,000円は原価下限を引き上げる', () => {
   const result = core.calculateCostFloor({ ...representativeCostInput, annualAdjustmentAmount: -50000 });
+  assert.equal(result.fixedAnnualRevenue, -50000);
+  assert.equal(result.monthlyCostFloor, 113889);
+});
+
+test('年額値引き50,000円は固定年間売上から差し引き、原価下限を引き上げる', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, annualDiscountAmount: 50000 });
   assert.equal(result.fixedAnnualRevenue, -50000);
   assert.equal(result.monthlyCostFloor, 113889);
 });
@@ -713,7 +746,7 @@ try {
   assert.match(htmlSource, /id="principal-mode-toggle"/);
   assert.match(htmlSource, />所長入力モード</);
   assert.match(htmlSource, /id="principal-print-dialog"/);
-  assert.match(htmlSource, /id="principal-print-password" type="password" autocomplete="off"/);
+  assert.match(htmlSource, /id="principal-print-password" name="principal-print-authorization" type="password" autocomplete="one-time-code"/);
   assert.match(htmlSource, /body\.mode-principal \.internal-mode-only \{ display:none!important; \}/);
   assert.doesNotMatch(htmlSource, /body\.mode-principal #approval-section/);
   assert.match(htmlSource, /id="prospect-summary"/);
@@ -755,6 +788,16 @@ try {
   assert.doesNotMatch(appSource, /ignoreApproval: isPrincipalInputMode\(\)/);
   assert.match(appSource, /function formatMoneyInputRealtime\(/);
   assert.match(appSource, /addEventListener\('input', formatMoneyInputRealtime, true\)/);
+  assert.match(htmlSource, /id="annual-discount" name="annual-discount-amount" type="text" inputmode="numeric" data-money autocomplete="off"/);
+  assert.match(htmlSource, /id="custom-software-price" name="custom-software-monthly-amount"[^>]+autocomplete="off"/);
+  assert.match(appSource, /name="software-monthly-amount-/);
+  assert.match(appSource, /input\.setAttribute\('autocomplete', 'off'\)/);
+  assert.match(appSource, /Number\.isNaN\(parsed\)/);
+  assert.match(appSource, /annualDiscountAmount: state\.services\.annualDiscount/);
+  assert.match(appSource, /name: '値引き'/);
+  assert.match(appSource, /discount_exceeds_subtotal/);
+  assert.match(coreSource, /const preDiscountSubtotal =/);
+  assert.match(coreSource, /-annualDiscountAmount/);
   assert.match(appSource, /function renderValueDiagram\(/);
   assert.match(appSource, /function adoptStandardFee\(/);
   assert.match(appSource, /function buildApprovalSnapshot\(/);

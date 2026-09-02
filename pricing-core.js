@@ -461,10 +461,17 @@
       : sumSoftwareBilling(payload.softwareItems);
     const monthlyOtherFees = finiteOr(payload.monthlyOtherFees, 0);
     const monthlyAdjustmentAmount = finiteOr(payload.monthlyAdjustmentAmount, 0);
+    const annualDiscountAmount = finiteOr(
+      payload.annualDiscountAmount !== undefined ? payload.annualDiscountAmount : payload.discountAmount,
+      0
+    );
 
     const numericFields = [monthlyAdvisoryFee, softwareMonthlyFee, monthlyOtherFees, monthlyAdjustmentAmount];
     if (numericFields.some(function (value) { return !Number.isFinite(value); })) {
       return { status: 'invalid', subtotal: null, consumptionTax: null, total: null, reason: 'invalid_monthly_amount' };
+    }
+    if (!Number.isFinite(annualDiscountAmount) || annualDiscountAmount < 0) {
+      return { status: 'invalid', subtotal: null, consumptionTax: null, total: null, reason: 'invalid_discount_amount' };
     }
 
     let corporateClosingFee = finiteOr(payload.corporateClosingFee, 0);
@@ -522,7 +529,19 @@
     const monthlyOtherAnnual = monthlyOtherFees * 12;
     const monthlyAdjustmentAnnual = monthlyAdjustmentAmount * 12;
     const annualFixedTotal = Object.keys(annualAmounts).reduce(function (sum, key) { return sum + annualAmounts[key]; }, 0);
-    const subtotal = monthlyAdvisoryAnnual + softwareAnnual + monthlyOtherAnnual + monthlyAdjustmentAnnual + annualFixedTotal + serviceLinesTotal;
+    const preDiscountSubtotal = monthlyAdvisoryAnnual + softwareAnnual + monthlyOtherAnnual + monthlyAdjustmentAnnual + annualFixedTotal + serviceLinesTotal;
+    if (annualDiscountAmount > 0 && annualDiscountAmount > preDiscountSubtotal) {
+      return {
+        status: 'invalid',
+        subtotal: null,
+        consumptionTax: null,
+        total: null,
+        preDiscountSubtotal: preDiscountSubtotal,
+        annualDiscountAmount: annualDiscountAmount,
+        reason: 'discount_exceeds_subtotal'
+      };
+    }
+    const subtotal = preDiscountSubtotal - annualDiscountAmount;
     const taxResult = calculateConsumptionTax({ amount: subtotal, taxRate: payload.taxRate, rounding: payload.taxRounding });
     if (taxResult.status !== 'calculated') return { status: 'invalid', subtotal: null, consumptionTax: null, total: null, reason: 'invalid_tax_rate' };
 
@@ -541,6 +560,8 @@
         monthlyAdjustmentAnnual: monthlyAdjustmentAnnual,
         otherAnnualFee: annualAmounts.otherAnnualFee,
         annualAdjustmentAmount: annualAmounts.annualAdjustmentAmount,
+        preDiscountSubtotal: preDiscountSubtotal,
+        annualDiscountAmount: annualDiscountAmount,
         serviceLinesTotal: serviceLinesTotal
       },
       serviceLines: lineResults,
@@ -714,12 +735,18 @@
         ? softwareValues.reduce(function (sum, value) { return sum + value; }, 0)
         : NaN;
     }
+    const annualDiscountAmount = finiteOr(
+      payload.annualDiscountAmount !== undefined ? payload.annualDiscountAmount : payload.discountAmount,
+      0
+    );
+    if (!Number.isFinite(annualDiscountAmount) || annualDiscountAmount < 0) return NaN;
     const values = [
       softwareMonthlyRevenue * 12,
       finiteOr(payload.yearEndAdjustmentFee, 0),
       finiteOr(payload.depreciableAssetsFee, 0),
       finiteOr(payload.otherAnnualSpotRevenue !== undefined ? payload.otherAnnualSpotRevenue : payload.otherAnnualFee, 0),
-      finiteOr(payload.annualAdjustmentAmount, 0)
+      finiteOr(payload.annualAdjustmentAmount, 0),
+      -annualDiscountAmount
     ];
     return values.every(Number.isFinite) ? values.reduce(function (sum, value) { return sum + value; }, 0) : NaN;
   }

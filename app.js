@@ -53,6 +53,11 @@
     return '¥' + Math.round(value).toLocaleString('ja-JP');
   }
 
+  function signedYen(value, fallback) {
+    if (!Number.isFinite(value)) return fallback || '未確定';
+    return value < 0 ? '−' + yen(Math.abs(value)) : yen(value);
+  }
+
   function diagramYen(value, fallback) {
     if (!Number.isFinite(value)) return fallback || '未入力';
     return value < 0 ? '−' + yen(Math.abs(value)) : yen(value);
@@ -123,6 +128,7 @@
         otherSpotFee: 0,
         otherSpotSelected: false,
         annualAdjustment: 0,
+        annualDiscount: 0,
         software: initialSoftware(),
         customSoftware: { id: 'custom', name: '', selected: false, quantity: 1, monthlyBillingPrice: null, monthlyDirectCost: null },
         income: initialIncomeServices()
@@ -307,6 +313,7 @@
         otherSpotFee: state.services.otherSpotFee,
         otherSpotSelected: state.services.otherSpotSelected,
         annualAdjustment: state.services.annualAdjustment,
+        annualDiscount: state.services.annualDiscount,
         software,
         income
       },
@@ -521,12 +528,24 @@
 
   function bindMoneyInput(input, getter, setter, options) {
     const settings = Object.assign({ allowNull: true }, options || {});
+    const restoreCurrentValue = () => {
+      const currentValue = getter();
+      input.value = Number.isFinite(currentValue) ? formatNumber(currentValue) : '';
+    };
     const current = getter();
     input.value = Number.isFinite(current) ? formatNumber(current) : '';
     input.addEventListener('input', () => {
       const parsed = parseNumber(input.value);
+      if (Number.isNaN(parsed)) {
+        restoreCurrentValue();
+        return;
+      }
       setter(parsed === null && !settings.allowNull ? 0 : parsed);
       recalculate();
+    });
+    input.addEventListener('focus', () => {
+      const parsed = parseNumber(input.value);
+      if (input.value.trim() && Number.isNaN(parsed)) restoreCurrentValue();
     });
     input.addEventListener('blur', () => {
       const parsed = parseNumber(input.value);
@@ -652,18 +671,15 @@
       const row = document.createElement('div');
       row.className = 'service-row software-row prospect-choice-row';
       row.dataset.softwareId = definition.id;
-      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><input type="text" inputmode="numeric" data-money aria-label="' + escapeHtml(item.name) + ' 月額料金"></label><label class="field internal-mode-only"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money placeholder="未設定"></label><span class="pill internal-mode-only" data-gross-profit>粗利益：未確定</span>';
+      row.innerHTML = '<label class="inline-check"><input type="checkbox"><span><b>' + escapeHtml(item.name) + '</b></span></label><span class="mini">月額</span><label class="field"><input type="text" inputmode="numeric" data-money autocomplete="off" name="software-monthly-amount-' + escapeHtml(definition.id) + '" aria-label="' + escapeHtml(item.name) + ' 月額料金"></label><label class="field internal-mode-only"><span class="field-name">月額直接原価</span><input type="text" inputmode="numeric" data-money autocomplete="off" name="software-direct-cost-' + escapeHtml(definition.id) + '" placeholder="未設定"></label><span class="pill internal-mode-only" data-gross-profit>粗利益：未確定</span>';
       const checkbox = row.querySelector('input[type="checkbox"]');
       const inputs = row.querySelectorAll('input[data-money]');
       const grossProfit = row.querySelector('[data-gross-profit]');
       const updateGrossProfit = () => { grossProfit.textContent = '粗利益：' + (Number.isFinite(item.monthlyBillingPrice) && Number.isFinite(item.monthlyDirectCost) ? yen(item.monthlyBillingPrice - item.monthlyDirectCost) : '未確定'); };
       checkbox.checked = item.selected;
-      inputs[0].value = formatNumber(item.monthlyBillingPrice);
-      inputs[1].value = Number.isFinite(item.monthlyDirectCost) ? formatNumber(item.monthlyDirectCost) : '';
       checkbox.addEventListener('change', () => { item.selected = checkbox.checked; recalculate(); });
-      inputs[0].addEventListener('input', () => { item.monthlyBillingPrice = parseNumber(inputs[0].value); updateGrossProfit(); recalculate(); });
-      inputs[1].addEventListener('input', () => { item.monthlyDirectCost = parseNumber(inputs[1].value); updateGrossProfit(); recalculate(); });
-      inputs.forEach((input) => input.addEventListener('blur', () => { const value = parseNumber(input.value); if (Number.isFinite(value)) input.value = formatNumber(value); }));
+      bindMoneyInput(inputs[0], () => item.monthlyBillingPrice, (value) => { item.monthlyBillingPrice = value; updateGrossProfit(); });
+      bindMoneyInput(inputs[1], () => item.monthlyDirectCost, (value) => { item.monthlyDirectCost = value; updateGrossProfit(); });
       updateGrossProfit();
       host.appendChild(row);
     });
@@ -802,7 +818,13 @@
 
   function computeAnnualEstimate(monthlyFee) {
     if (state.entity === 'income') {
-      return core.calculateAnnualEstimate({ entityType: 'income', monthlyAdvisoryFee: 0, serviceLines: selectedIncomeLines(), taxRate: config.taxRate });
+      return core.calculateAnnualEstimate({
+        entityType: 'income',
+        monthlyAdvisoryFee: 0,
+        serviceLines: selectedIncomeLines(),
+        annualDiscountAmount: state.services.annualDiscount,
+        taxRate: config.taxRate
+      });
     }
     return core.calculateAnnualEstimate({
       entityType: state.entity,
@@ -815,6 +837,7 @@
       softwareItems: selectedSoftware(),
       otherAnnualFee: state.services.otherSpotSelected ? numberOrZero(state.services.otherSpotFee) : 0,
       annualAdjustmentAmount: numberOrZero(state.services.annualAdjustment),
+      annualDiscountAmount: state.services.annualDiscount,
       taxRate: config.taxRate
     });
   }
@@ -848,6 +871,7 @@
       depreciableAssetsFee: assetTaxFee(),
       otherAnnualSpotRevenue: state.services.otherSpotSelected ? numberOrZero(state.services.otherSpotFee) : 0,
       annualAdjustmentAmount: numberOrZero(state.services.annualAdjustment),
+      annualDiscountAmount: state.services.annualDiscount,
       softwareItems: selectedSoftware()
     });
     const recommendation = bandResult.status === 'calculated' && costFloor.status === 'calculated'
@@ -925,6 +949,8 @@
     if (state.entity !== 'income' && !model.recommendation && Number.isFinite(state.decision.finalMonthlyFee) && model.bandResult && Number.isFinite(model.bandResult.fee) && state.decision.finalMonthlyFee < model.bandResult.fee && !(state.decision.exceptionReason + state.decision.exceptionMemo).trim()) add('exception_reason_missing', '最終月次顧問料が付加価値帯基準額を下回るため、例外理由を入力してください。');
     if (state.entity !== 'income' && model.adjustmentResult.status === 'invalid') add('invalid_adjustment_amount', '業務量・複雑性の調整額を数値で入力してください。');
     if (state.entity !== 'income' && model.costFloor.status !== 'calculated' && !(state.decision.costFloorExceptionReason && state.decision.costFloorExceptionMemo.trim())) add('cost_floor_exception_missing', '原価下限が未確定です。所内詳細で「原価下限未確認」の例外理由と詳細メモを入力してください。');
+    if (!Number.isFinite(state.services.annualDiscount) || state.services.annualDiscount < 0) add('discount_invalid', '値引き額は0円以上の数値で入力してください。');
+    if (model.estimate && model.estimate.reason === 'discount_exceeds_subtotal') add('discount_exceeds_subtotal', '値引き額が値引き前の税抜小計を超えています。');
     if (!state.document.scope.trim()) add('scope_missing', '業務範囲は印刷／PDF出力の必須項目です。入力してください。');
     selectedSoftware().forEach((software) => {
       if (!Number.isFinite(software.monthlyBillingPrice) || software.monthlyBillingPrice < 0) add('software_billing_invalid', '選択したソフトウェアの月額料金を確認してください。');
@@ -1063,6 +1089,7 @@
     if (!estimate || estimate.status !== 'calculated') return lines;
     if (state.entity === 'income') {
       selectedIncomeLines().forEach((line) => lines.push({ name: line.name, unit: yen(line.amount), quantity: line.quantity, annual: line.amount * line.quantity }));
+      if (state.services.annualDiscount > 0) lines.push({ name: '値引き', unit: '年額・税抜', quantity: 1, annual: -state.services.annualDiscount });
       return lines;
     }
     const fee = numberOrZero(state.decision.finalMonthlyFee);
@@ -1076,6 +1103,7 @@
     if (b.depreciableAssetsFee) lines.push({ name: '償却資産税申告', unit: yen(b.depreciableAssetsFee), quantity: state.services.assetTaxCount, annual: b.depreciableAssetsFee });
     if (b.otherAnnualFee) lines.push({ name: state.services.otherSpotName || 'その他年次・スポット報酬', unit: yen(b.otherAnnualFee), quantity: 1, annual: b.otherAnnualFee });
     if (b.annualAdjustmentAmount) lines.push({ name: '年間調整', unit: yen(b.annualAdjustmentAmount), quantity: 1, annual: b.annualAdjustmentAmount });
+    if (b.annualDiscountAmount) lines.push({ name: '値引き', unit: '年額・税抜', quantity: 1, annual: -b.annualDiscountAmount });
     return lines;
   }
 
@@ -1089,6 +1117,7 @@
         const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
         lines.push({ name: item.name, detail: '単価 × ' + quantity + '件', annual: amountReady ? item.price * quantity : null, pending: !amountReady, optional: true });
       });
+      if (state.services.annualDiscount > 0) lines.push({ name: '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
       return lines;
     }
 
@@ -1124,6 +1153,9 @@
     if (numberOrZero(state.services.annualAdjustment) !== 0) {
       lines.push({ name: 'その他調整', detail: '事前設定済み', annual: numberOrZero(state.services.annualAdjustment), pending: false, optional: true });
     }
+    if (state.services.annualDiscount > 0) {
+      lines.push({ name: '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
+    }
     return lines;
   }
 
@@ -1147,7 +1179,7 @@
     const lines = prospectChecklistLines();
     const selectedCount = lines.filter((line) => line.optional).length;
     $('prospect-selection-status').textContent = '選択中 ' + selectedCount + '件';
-    $('prospect-summary-lines').innerHTML = lines.map((line) => '<div class="prospect-line"><div><div class="prospect-line-name">' + escapeHtml(line.name) + '</div><div class="mini">' + escapeHtml(line.detail) + '</div></div><div class="prospect-line-amount">' + (line.pending ? '金額未確定' : yen(line.annual)) + '</div></div>').join('') || '<div class="empty-state">見積項目はまだ選択されていません</div>';
+    $('prospect-summary-lines').innerHTML = lines.map((line) => '<div class="prospect-line"><div><div class="prospect-line-name">' + escapeHtml(line.name) + '</div><div class="mini">' + escapeHtml(line.detail) + '</div></div><div class="prospect-line-amount">' + (line.pending ? '金額未確定' : signedYen(line.annual)) + '</div></div>').join('') || '<div class="empty-state">見積項目はまだ選択されていません</div>';
 
     const taxPending = state.entity !== 'income' && consumptionStatus === 'unconfirmed';
     const hasPending = lines.some((line) => line.pending) || taxPending;
@@ -1179,7 +1211,7 @@
     $('print-approval-label').textContent = isPrincipalInputMode() ? '印刷前・所長パスワード未確認' : (approved ? '' : '参考表示・所内未承認');
     $('print-approval-label').classList.toggle('hidden', approved || principalAuthorized);
     $('print-total').textContent = estimate && estimate.status === 'calculated' ? yen(estimate.total) + '（税込）' : '未確定';
-    $('quote-rows').innerHTML = quoteLines().map((line) => '<tr><td>' + escapeHtml(line.name) + '</td><td>' + escapeHtml(line.unit) + '</td><td>' + escapeHtml(line.quantity) + '</td><td class="money">' + yen(line.annual) + '</td></tr>').join('') || '<tr><td colspan="4" class="empty-state">見積項目がありません</td></tr>';
+    $('quote-rows').innerHTML = quoteLines().map((line) => '<tr><td>' + escapeHtml(line.name) + '</td><td>' + escapeHtml(line.unit) + '</td><td>' + escapeHtml(line.quantity) + '</td><td class="money">' + signedYen(line.annual) + '</td></tr>').join('') || '<tr><td colspan="4" class="empty-state">見積項目がありません</td></tr>';
     $('quote-totals').innerHTML = estimate && estimate.status === 'calculated' ? '<tr><th>小計</th><td class="money">' + yen(estimate.subtotal) + '</td></tr><tr><th>消費税 ' + (config.taxRate * 100) + '%</th><td class="money">' + yen(estimate.consumptionTax) + '</td></tr><tr><th>税込合計</th><td class="money"><b>' + yen(estimate.total) + '</b></td></tr>' : '';
     $('reference-entity').textContent = entityLabels[state.entity];
     $('reference-months').textContent = state.entity === 'income' ? '該当なし' : state.fiscalMonths + 'か月';
@@ -1313,6 +1345,7 @@
         : '所長入力モード：' + validation.errors[0].message;
     }
     $('scope-text').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'scope_missing')));
+    $('annual-discount').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'discount_invalid' || error.code === 'discount_exceeds_subtotal')));
     $('customer-print-button').disabled = !validation.allowed;
     $('internal-print-button').disabled = !standardValidation.allowed;
   }
@@ -1492,6 +1525,10 @@
   }
 
   function bindStaticInputs() {
+    qsa('input[data-money]').forEach((input, index) => {
+      input.setAttribute('autocomplete', 'off');
+      if (!input.name) input.name = input.id ? input.id + '-amount' : 'money-amount-' + index;
+    });
     document.addEventListener('input', formatMoneyInputRealtime, true);
     qsa('[data-entity]').forEach((button) => button.addEventListener('click', () => setEntity(button.dataset.entity)));
     $('internal-mode-toggle').addEventListener('click', () => {
@@ -1535,6 +1572,7 @@
     $('asset-tax-count').value = state.services.assetTaxCount;
     $('asset-tax-count').addEventListener('input', () => { state.services.assetTaxCount = Math.max(1, Math.floor(numberOrZero($('asset-tax-count').value))); recalculate(); });
     $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + '（実際の所内業務範囲は設定で編集）';
+    bindMoneyInput($('annual-discount'), () => state.services.annualDiscount, (value) => { state.services.annualDiscount = value; }, { allowNull: false });
     bindText('custom-software-name', state.services.customSoftware, 'name');
     bindMoneyInput($('custom-software-price'), () => state.services.customSoftware.monthlyBillingPrice, (value) => { state.services.customSoftware.monthlyBillingPrice = value; });
     bindMoneyInput($('custom-software-cost'), () => state.services.customSoftware.monthlyDirectCost, (value) => { state.services.customSoftware.monthlyDirectCost = value; });
