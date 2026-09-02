@@ -706,6 +706,8 @@ try {
   assert.match(htmlSource, /印刷／PDF出力時に必須です。/);
   assert.match(appSource, /'scope_missing'/);
   assert.match(appSource, /scope-text'\)\.setAttribute\('aria-invalid'/);
+  assert.match(htmlSource, /\.issuer \{ width:max-content; max-width:100%; min-width:290px; margin-left:auto;/);
+  assert.match(htmlSource, /@media print \{[\s\S]*?\.quote-head \{ display:flex; \}[\s\S]*?\.issuer \{ min-width:290px; \}/);
   assert.doesNotMatch(htmlSource, /data-interaction-mode="prospect"/);
   assert.match(htmlSource, /id="internal-mode-toggle"/);
   assert.match(htmlSource, /id="principal-mode-toggle"/);
