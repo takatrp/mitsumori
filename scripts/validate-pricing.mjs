@@ -319,6 +319,20 @@ test('値引きは税抜小計から差し引き、値引き後に消費税を�
   assert.equal(estimate.total, 121000);
 });
 
+test('その他年次・スポット報酬はマイナス金額を小計と消費税へ反映する', () => {
+  const estimate = core.calculateAnnualEstimate({
+    entityType: 'corp',
+    monthlyAdvisoryFee: 10000,
+    otherAnnualFee: -20000,
+    taxRate: 0.10
+  });
+  assert.equal(estimate.status, 'calculated');
+  assert.equal(estimate.breakdown.otherAnnualFee, -20000);
+  assert.equal(estimate.subtotal, 100000);
+  assert.equal(estimate.consumptionTax, 10000);
+  assert.equal(estimate.total, 110000);
+});
+
 test('負の値引き額を拒否する', () => {
   const estimate = core.calculateAnnualEstimate({ monthlyAdvisoryFee: 10000, annualDiscountAmount: -1 });
   assert.equal(estimate.status, 'invalid');
@@ -431,6 +445,12 @@ test('年間調整額▲50,000円は原価下限を引き上げる', () => {
 
 test('年額値引き50,000円は固定年間売上から差し引き、原価下限を引き上げる', () => {
   const result = core.calculateCostFloor({ ...representativeCostInput, annualDiscountAmount: 50000 });
+  assert.equal(result.fixedAnnualRevenue, -50000);
+  assert.equal(result.monthlyCostFloor, 113889);
+});
+
+test('マイナスのその他年次・スポット報酬は原価下限を引き上げる', () => {
+  const result = core.calculateCostFloor({ ...representativeCostInput, otherAnnualSpotRevenue: -50000 });
   assert.equal(result.fixedAnnualRevenue, -50000);
   assert.equal(result.monthlyCostFloor, 113889);
 });
@@ -600,11 +620,13 @@ test('承認fingerprintはキー順に依存せず、見積内容変更を検出
   const valueChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, valueValues: { ordinaryProfit: 1 } });
   const serviceChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: false, adjustment: 0 } });
   const adjustmentChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: true, adjustment: -50000 } });
+  const discountNameChanged = core.calculateApprovalFingerprint({ clientName: 'A', finalMonthlyFee: 35000, services: { closing: true, adjustment: 0, annualDiscountName: '初年度特別値引き' } });
   assert.equal(first, reordered);
   assert.notEqual(first, feeChanged);
   assert.notEqual(first, valueChanged);
   assert.notEqual(first, serviceChanged);
   assert.notEqual(first, adjustmentChanged);
+  assert.notEqual(first, discountNameChanged);
 });
 
 test('所得税加算項目だけの外部出力を禁止する', () => {
@@ -789,12 +811,20 @@ try {
   assert.match(appSource, /function formatMoneyInputRealtime\(/);
   assert.match(appSource, /addEventListener\('input', formatMoneyInputRealtime, true\)/);
   assert.match(htmlSource, /id="annual-discount" name="annual-discount-amount" type="text" inputmode="numeric" data-money autocomplete="off"/);
+  assert.match(htmlSource, /id="annual-discount-name" name="annual-discount-name" type="text" autocomplete="off"/);
+  assert.match(htmlSource, /id="other-spot-fee" name="other-spot-annual-amount" type="text" inputmode="decimal" data-money autocomplete="off"/);
+  assert.match(htmlSource, /id="apply-standard-scope">標準業務を入力<\/button>/);
   assert.match(htmlSource, /id="custom-software-price" name="custom-software-monthly-amount"[^>]+autocomplete="off"/);
   assert.match(appSource, /name="software-monthly-amount-/);
   assert.match(appSource, /input\.setAttribute\('autocomplete', 'off'\)/);
   assert.match(appSource, /Number\.isNaN\(parsed\)/);
   assert.match(appSource, /annualDiscountAmount: state\.services\.annualDiscount/);
-  assert.match(appSource, /name: '値引き'/);
+  assert.match(appSource, /annualDiscountName: state\.services\.annualDiscountName/);
+  assert.match(appSource, /'discount_name_missing'/);
+  assert.match(appSource, /state\.services\.otherSpotFee !== 0/);
+  assert.match(appSource, /const standardScopeText = '月次監査、税務相談、決算・申告業務';/);
+  assert.match(appSource, /\$\('apply-standard-scope'\)\.addEventListener\('click'/);
+  assert.match(appSource, /annualDiscountName \|\| ''\)\.trim\(\) \|\| '値引き'/);
   assert.match(appSource, /discount_exceeds_subtotal/);
   assert.match(coreSource, /const preDiscountSubtotal =/);
   assert.match(coreSource, /-annualDiscountAmount/);

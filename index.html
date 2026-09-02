@@ -322,7 +322,10 @@
           <details open id="discount-services">
             <summary>値引き</summary>
             <div class="details-body">
-              <label class="field prospect-choice"><span class="field-name">値引き額（年額・税抜）</span><input id="annual-discount" name="annual-discount-amount" type="text" inputmode="numeric" data-money autocomplete="off" aria-describedby="annual-discount-help"><span class="prospect-impact" id="annual-discount-help">正の金額で入力し、値引き前の税抜小計から差し引きます。</span></label>
+              <div class="grid two">
+                <label class="field prospect-choice"><span class="field-name">値引き名</span><input id="annual-discount-name" name="annual-discount-name" type="text" autocomplete="off" placeholder="例：初年度特別値引き"></label>
+                <label class="field prospect-choice"><span class="field-name">値引き額（年額・税抜）</span><input id="annual-discount" name="annual-discount-amount" type="text" inputmode="numeric" data-money autocomplete="off" aria-describedby="annual-discount-help"><span class="prospect-impact" id="annual-discount-help">正の金額で入力し、値引き前の税抜小計から差し引きます。</span></label>
+              </div>
             </div>
           </details>
 
@@ -377,7 +380,7 @@
               <label class="inline-check prospect-choice"><input id="other-spot-selected" type="checkbox"><span>その他年次・スポット業務を見積りに含める</span></label>
               <div class="grid three">
                 <label class="field"><span class="field-name">その他業務名</span><input id="other-spot-name" type="text" placeholder="例：個別相談業務"></label>
-                <label class="field"><span class="field-name">その他年次・スポット報酬</span><input id="other-spot-fee" type="text" inputmode="numeric" data-money></label>
+                <label class="field"><span class="field-name">その他年次・スポット報酬</span><input id="other-spot-fee" name="other-spot-annual-amount" type="text" inputmode="decimal" data-money autocomplete="off" aria-describedby="other-spot-fee-help"><span class="mini" id="other-spot-fee-help">マイナス金額も入力できます。0円以外を入力してください。</span></label>
                 <label class="field internal-mode-only"><span class="field-name">年間調整額（±）</span><input id="annual-adjustment" type="text" inputmode="numeric" data-money><span class="mini">従来の自由調整。月額の業務量調整とは別です。</span></label>
               </div>
             </div>
@@ -489,7 +492,7 @@
       </section>
 
       <section class="card" id="scope-section">
-        <div class="card-hd"><h2>7. 見積書の業務範囲・備考</h2></div>
+        <div class="card-hd"><h2>7. 見積書の業務範囲・備考</h2><button type="button" class="btn" id="apply-standard-scope">標準業務を入力</button></div>
         <div class="card-bd grid two">
           <label class="field"><span class="field-name">業務範囲 <span class="required-mark">*</span></span><textarea id="scope-text" required aria-required="true" placeholder="例：月次監査、税務相談、決算・申告業務"></textarea><span class="mini">印刷／PDF出力時に必須です。</span></label>
           <label class="field"><span class="field-name">顧客向け備考</span><textarea id="notes-text"></textarea></label>

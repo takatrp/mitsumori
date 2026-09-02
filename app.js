@@ -9,6 +9,7 @@
   const qsa = (selector, root) => Array.from((root || document).querySelectorAll(selector));
   const entityLabels = { corp: '法人', sole: '個人', income: '所得税確定申告' };
   const roleLabels = { playing: 'プレイング', manager: '管理者', executive: '経営者' };
+  const standardScopeText = '月次監査、税務相談、決算・申告業務';
   const interactionModeDescriptions = {
     internal: '所内で標準報酬、原価、利益率まで確認しています。「ノーマルモードに戻る」を押すと対面用の画面へ戻ります。',
     principal: 'ノーマルモードと同じ画面で金額を一緒に確認し、印刷・PDF時だけ所長パスワードで承認を代替するモードです。社内原価・利益率は表示しません。',
@@ -128,6 +129,7 @@
         otherSpotFee: 0,
         otherSpotSelected: false,
         annualAdjustment: 0,
+        annualDiscountName: '',
         annualDiscount: 0,
         software: initialSoftware(),
         customSoftware: { id: 'custom', name: '', selected: false, quantity: 1, monthlyBillingPrice: null, monthlyDirectCost: null },
@@ -313,6 +315,7 @@
         otherSpotFee: state.services.otherSpotFee,
         otherSpotSelected: state.services.otherSpotSelected,
         annualAdjustment: state.services.annualAdjustment,
+        annualDiscountName: state.services.annualDiscountName,
         annualDiscount: state.services.annualDiscount,
         software,
         income
@@ -908,6 +911,7 @@
       state.document.scope,
       state.document.notes,
       state.services.otherSpotName,
+      state.services.annualDiscountName,
       state.services.customSoftware.name,
       ...quoteLines().map((line) => line.name)
     ].join(' ');
@@ -950,6 +954,7 @@
     if (state.entity !== 'income' && model.adjustmentResult.status === 'invalid') add('invalid_adjustment_amount', '業務量・複雑性の調整額を数値で入力してください。');
     if (state.entity !== 'income' && model.costFloor.status !== 'calculated' && !(state.decision.costFloorExceptionReason && state.decision.costFloorExceptionMemo.trim())) add('cost_floor_exception_missing', '原価下限が未確定です。所内詳細で「原価下限未確認」の例外理由と詳細メモを入力してください。');
     if (!Number.isFinite(state.services.annualDiscount) || state.services.annualDiscount < 0) add('discount_invalid', '値引き額は0円以上の数値で入力してください。');
+    if (state.services.annualDiscount > 0 && !String(state.services.annualDiscountName || '').trim()) add('discount_name_missing', '値引き名を入力してください。');
     if (model.estimate && model.estimate.reason === 'discount_exceeds_subtotal') add('discount_exceeds_subtotal', '値引き額が値引き前の税抜小計を超えています。');
     if (!state.document.scope.trim()) add('scope_missing', '業務範囲は印刷／PDF出力の必須項目です。入力してください。');
     selectedSoftware().forEach((software) => {
@@ -957,7 +962,7 @@
       if (software.id === 'custom' && !String(software.name || '').trim()) add('custom_software_name_missing', '任意追加ソフトの名称を入力してください。');
     });
     if (state.services.otherSpotSelected && !String(state.services.otherSpotName || '').trim()) add('other_spot_name_missing', '選択したその他年次・スポット業務の名称を入力してください。');
-    if (state.services.otherSpotSelected && (!Number.isFinite(state.services.otherSpotFee) || state.services.otherSpotFee <= 0)) add('other_spot_fee_invalid', '選択したその他年次・スポット業務の報酬額を入力してください。');
+    if (state.services.otherSpotSelected && (!Number.isFinite(state.services.otherSpotFee) || state.services.otherSpotFee === 0)) add('other_spot_fee_invalid', '選択したその他年次・スポット業務には0円以外の報酬額を入力してください。');
     return { allowed: errors.length === 0, errors };
   }
 
@@ -1089,7 +1094,7 @@
     if (!estimate || estimate.status !== 'calculated') return lines;
     if (state.entity === 'income') {
       selectedIncomeLines().forEach((line) => lines.push({ name: line.name, unit: yen(line.amount), quantity: line.quantity, annual: line.amount * line.quantity }));
-      if (state.services.annualDiscount > 0) lines.push({ name: '値引き', unit: '年額・税抜', quantity: 1, annual: -state.services.annualDiscount });
+      if (state.services.annualDiscount > 0) lines.push({ name: String(state.services.annualDiscountName || '').trim() || '値引き', unit: '年額・税抜', quantity: 1, annual: -state.services.annualDiscount });
       return lines;
     }
     const fee = numberOrZero(state.decision.finalMonthlyFee);
@@ -1101,9 +1106,9 @@
     if (b.consumptionTaxReturnFee) lines.push({ name: '消費税申告書作成', unit: yen(b.consumptionTaxReturnFee), quantity: 1, annual: b.consumptionTaxReturnFee });
     if (b.yearEndAdjustmentFee) lines.push({ name: '年末調整・源泉徴収票等', unit: yen(b.yearEndAdjustmentFee), quantity: 1, annual: b.yearEndAdjustmentFee });
     if (b.depreciableAssetsFee) lines.push({ name: '償却資産税申告', unit: yen(b.depreciableAssetsFee), quantity: state.services.assetTaxCount, annual: b.depreciableAssetsFee });
-    if (b.otherAnnualFee) lines.push({ name: state.services.otherSpotName || 'その他年次・スポット報酬', unit: yen(b.otherAnnualFee), quantity: 1, annual: b.otherAnnualFee });
+    if (b.otherAnnualFee) lines.push({ name: state.services.otherSpotName || 'その他年次・スポット報酬', unit: signedYen(b.otherAnnualFee), quantity: 1, annual: b.otherAnnualFee });
     if (b.annualAdjustmentAmount) lines.push({ name: '年間調整', unit: yen(b.annualAdjustmentAmount), quantity: 1, annual: b.annualAdjustmentAmount });
-    if (b.annualDiscountAmount) lines.push({ name: '値引き', unit: '年額・税抜', quantity: 1, annual: -b.annualDiscountAmount });
+    if (b.annualDiscountAmount) lines.push({ name: String(state.services.annualDiscountName || '').trim() || '値引き', unit: '年額・税抜', quantity: 1, annual: -b.annualDiscountAmount });
     return lines;
   }
 
@@ -1117,7 +1122,7 @@
         const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
         lines.push({ name: item.name, detail: '単価 × ' + quantity + '件', annual: amountReady ? item.price * quantity : null, pending: !amountReady, optional: true });
       });
-      if (state.services.annualDiscount > 0) lines.push({ name: '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
+      if (state.services.annualDiscount > 0) lines.push({ name: String(state.services.annualDiscountName || '').trim() || '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
       return lines;
     }
 
@@ -1147,14 +1152,14 @@
       lines.push({ name: item.name, detail: '月額 × ' + quantity + '契約 × 12か月', annual: amountReady ? item.monthlyBillingPrice * quantity * 12 : null, pending: !amountReady, optional: true });
     });
     if (state.services.otherSpotSelected) {
-      const amountReady = Number.isFinite(state.services.otherSpotFee) && state.services.otherSpotFee > 0;
+      const amountReady = Number.isFinite(state.services.otherSpotFee) && state.services.otherSpotFee !== 0;
       lines.push({ name: state.services.otherSpotName || 'その他年次・スポット業務', detail: '年額', annual: amountReady ? state.services.otherSpotFee : null, pending: !amountReady, optional: true });
     }
     if (numberOrZero(state.services.annualAdjustment) !== 0) {
       lines.push({ name: 'その他調整', detail: '事前設定済み', annual: numberOrZero(state.services.annualAdjustment), pending: false, optional: true });
     }
     if (state.services.annualDiscount > 0) {
-      lines.push({ name: '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
+      lines.push({ name: String(state.services.annualDiscountName || '').trim() || '値引き', detail: '年額・税抜', annual: -state.services.annualDiscount, pending: false, optional: true });
     }
     return lines;
   }
@@ -1345,6 +1350,7 @@
         : '所長入力モード：' + validation.errors[0].message;
     }
     $('scope-text').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'scope_missing')));
+    $('annual-discount-name').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'discount_name_missing')));
     $('annual-discount').setAttribute('aria-invalid', String(validation.errors.some((error) => error.code === 'discount_invalid' || error.code === 'discount_exceeds_subtotal')));
     $('customer-print-button').disabled = !validation.allowed;
     $('internal-print-button').disabled = !standardValidation.allowed;
@@ -1572,6 +1578,7 @@
     $('asset-tax-count').value = state.services.assetTaxCount;
     $('asset-tax-count').addEventListener('input', () => { state.services.assetTaxCount = Math.max(1, Math.floor(numberOrZero($('asset-tax-count').value))); recalculate(); });
     $('year-end-scope').textContent = config.services.yearEndAdjustment.scope.join('、') + '（実際の所内業務範囲は設定で編集）';
+    bindText('annual-discount-name', state.services, 'annualDiscountName');
     bindMoneyInput($('annual-discount'), () => state.services.annualDiscount, (value) => { state.services.annualDiscount = value; }, { allowNull: false });
     bindText('custom-software-name', state.services.customSoftware, 'name');
     bindMoneyInput($('custom-software-price'), () => state.services.customSoftware.monthlyBillingPrice, (value) => { state.services.customSoftware.monthlyBillingPrice = value; });
@@ -1583,6 +1590,11 @@
     $('other-spot-selected').checked = state.services.otherSpotSelected;
     $('other-spot-selected').addEventListener('change', () => { state.services.otherSpotSelected = $('other-spot-selected').checked; recalculate(); });
     bindMoneyInput($('annual-adjustment'), () => state.services.annualAdjustment, (value) => { state.services.annualAdjustment = value; }, { allowNull: false });
+    $('apply-standard-scope').addEventListener('click', () => {
+      state.document.scope = standardScopeText;
+      $('scope-text').value = standardScopeText;
+      recalculate();
+    });
     $('target-margin').value = state.cost.targetProfitRate === null ? '' : state.cost.targetProfitRate;
     $('target-margin').addEventListener('input', () => { state.cost.targetProfitRate = parseNumber($('target-margin').value); recalculate(); });
     $('overhead-rate').value = state.cost.overheadRate === null ? '' : state.cost.overheadRate;
